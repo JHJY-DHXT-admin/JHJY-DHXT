@@ -4,11 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
     <title>金海嘉运订货系统 HR1.0</title>
-    <!-- Firebase -->
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-    <!-- SheetJS -->
     <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
     <style>
         *{box-sizing:border-box;margin:0;padding:0}
@@ -38,6 +36,8 @@
     </style>
 </head>
 <body>
+    <datalist id="skuList"></datalist>
+
     <div id="loginPage" class="card login-box">
         <h2>🔐 金海嘉运订货系统</h2>
         <input id="loginUsername" placeholder="用户名" autofocus>
@@ -86,6 +86,16 @@
                 <div style="margin:8px 0"><strong>预估运费：</strong><span id="calcFee">0</span> 元</div>
                 <button id="submitOrderBtn">✅ 提交申请</button>
                 <span id="orderMsg" style="margin-left:12px;color:#1677ff"></span>
+
+                <hr style="margin:20px 0">
+                <h3>📥 批量导入订单</h3>
+                <p style="font-size:13px;color:#666">请严格按照以下列顺序准备Excel（首行为标题）：<br>
+                填表日期、来源、物流单号、收件人姓名、收件人地址、收件邮编、收件电话、发货箱数、目的地、订单号、店铺名称、品名、描述(材质）、商品数量、商品1SKU、产品1数量、商品2SKU、产品2数量、商品3SKU、产品3数量、商品4SKU、产品4数量、商品5SKU、产品5数量</p>
+                <button id="downloadTemplateBtn" class="btn-success" style="margin-bottom:8px">📋 下载导入模板</button>
+                <br>
+                <input type="file" id="batchOrderFile" accept=".xlsx, .xls">
+                <button id="batchImportBtn">📤 开始导入</button>
+                <div id="batchImportMsg" style="margin-top:8px;color:#1677ff"></div>
             </div>
             <div class="card">
                 <div style="display:flex;justify-content:space-between;align-items:center">
@@ -177,7 +187,7 @@
     </div>
 
 <script>
-    // ==================== 配置区域 (已填入您的Firebase配置) ====================
+    // ==================== 配置 ====================
     const firebaseConfig = {
         apiKey: "AIzaSyBurKJOCabtCMQol9OONrk_piEQ-qk07DA",
         authDomain: "jhjy-dhxt.firebaseapp.com",
@@ -198,7 +208,6 @@
     let allProducts = [];
     let shippingRule = { threshold: 4, low: 18, high: 35 };
 
-    // 辅助：确保匿名认证完成
     async function ensureAuth() {
         if (auth.currentUser) return auth.currentUser;
         return auth.signInAnonymously();
@@ -217,9 +226,7 @@
             const userData = userDoc.data();
             currentUser = { id: userDoc.id, username: userData.username, role: userData.role, balance: userData.balance || 0 };
             showMain();
-        } catch (e) {
-            document.getElementById('loginError').textContent = e.message;
-        }
+        } catch (e) { document.getElementById('loginError').textContent = e.message; }
     });
 
     function showMain() {
@@ -241,7 +248,6 @@
         switchTab('tab-orders');
     }
 
-    // 退出
     document.getElementById('logoutBtn').addEventListener('click', async () => {
         await auth.signOut();
         currentUser = null;
@@ -249,7 +255,6 @@
         document.getElementById('loginPage').style.display = 'block';
     });
 
-    // 导航切换
     document.querySelectorAll('.nav-link').forEach(link => {
         link.addEventListener('click', () => switchTab(link.dataset.tab));
     });
@@ -270,6 +275,7 @@
         const snap = await db.collection('products').get();
         allProducts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         renderSkuInputs();
+        document.getElementById('skuList').innerHTML = allProducts.map(p => `<option value="${p.sku}">${p.sku} (¥${p.price})</option>`).join('');
     }
 
     function renderSkuInputs() {
@@ -281,26 +287,21 @@
             div.className = 'row-flex';
             div.innerHTML = `
                 <div><label>商品${i} SKU</label>
-                <select class="sku-select" data-index="${i}">
-                    <option value="">--选择SKU--</option>
-                    ${allProducts.map(p => `<option value="${p.sku}">${p.sku} (¥${p.price})</option>`).join('')}
-                </select></div>
+                <input type="text" class="sku-input" list="skuList" placeholder="输入或选择SKU"></div>
                 <div><label>数量</label><input type="number" class="sku-qty" value="0" min="0"></div>
             `;
             container.appendChild(div);
         }
-        document.querySelectorAll('.sku-select, .sku-qty').forEach(el => {
-            el.addEventListener('change', updateFeePreview);
+        document.querySelectorAll('.sku-input, .sku-qty').forEach(el => {
+            el.addEventListener('input', updateFeePreview);
         });
-        document.getElementById('totalBoxes').addEventListener('input', updateFeePreview);
+        updateFeePreview();
     }
 
     function updateFeePreview() {
-        const totalBoxes = parseInt(document.getElementById('totalBoxes').value) || 0;
         let totalQty = 0;
         document.querySelectorAll('.sku-qty').forEach(inp => totalQty += parseInt(inp.value) || 0);
-        const fee = calcShipping(totalBoxes > 0 ? totalBoxes : totalQty);
-        document.getElementById('calcFee').textContent = fee;
+        document.getElementById('calcFee').textContent = calcShipping(totalQty);
     }
 
     function calcShipping(quantity) {
@@ -323,8 +324,7 @@
     document.getElementById('importProductsBtn').addEventListener('click', async () => {
         if (currentUser.role !== 'admin') return;
         await ensureAuth();
-        const fileInput = document.getElementById('productFile');
-        const file = fileInput.files[0];
+        const file = document.getElementById('productFile').files[0];
         if (!file) { alert('请选择Excel文件'); return; }
         const reader = new FileReader();
         reader.onload = async (e) => {
@@ -332,7 +332,7 @@
             const wb = XLSX.read(data, { type: 'array' });
             const ws = wb.Sheets[wb.SheetNames[0]];
             const rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
-            if (rows.length < 2) { alert('文件无数据或格式错误'); return; }
+            if (rows.length < 2) { alert('文件无数据'); return; }
             const productsToAdd = [];
             for (let i = 1; i < rows.length; i++) {
                 const sku = String(rows[i][0] || '').trim();
@@ -378,7 +378,6 @@
         const doc = await db.collection('settings').doc('shipping').get();
         if (doc.exists) shippingRule = doc.data();
     }
-
     async function loadShippingSettings() {
         await ensureAuth();
         const doc = await db.collection('settings').doc('shipping').get();
@@ -388,7 +387,6 @@
             document.getElementById('shipHigh').value = doc.data().high;
         }
     }
-
     document.getElementById('saveShippingBtn').addEventListener('click', async () => {
         await ensureAuth();
         const threshold = parseInt(document.getElementById('shipThreshold').value);
@@ -408,8 +406,7 @@
         snap.forEach(doc => {
             const u = doc.data();
             const row = tbody.insertRow();
-            row.innerHTML = `<td>${u.username}</td><td>${u.password}</td><td>${u.balance || 0}</td>
-            <td>${u.role}</td>
+            row.innerHTML = `<td>${u.username}</td><td>${u.password}</td><td>${u.balance || 0}</td><td>${u.role}</td>
             <td><button class="btn-danger" data-deluser="${doc.id}">删除</button></td>`;
         });
         document.querySelectorAll('[data-deluser]').forEach(btn => {
@@ -421,7 +418,6 @@
             });
         });
     }
-
     document.getElementById('addUserBtn').addEventListener('click', async () => {
         await ensureAuth();
         const username = document.getElementById('newUsername').value.trim();
@@ -446,7 +442,6 @@
             document.getElementById('myBalance').textContent = currentUser.balance.toFixed(2);
         }
     }
-
     document.getElementById('applyRechargeBtn').addEventListener('click', async () => {
         await ensureAuth();
         const amount = parseFloat(document.getElementById('rechargeAmount').value);
@@ -467,6 +462,10 @@
         const container = document.getElementById('pendingRecharges');
         container.innerHTML = '';
         const snap = await db.collection('recharges').where('status', '==', 'pending').orderBy('timestamp').get();
+        if (snap.empty) {
+            container.innerHTML = '<p style="color:#888">暂无待审核充值申请</p>';
+            return;
+        }
         snap.forEach(doc => {
             const r = doc.data();
             const div = document.createElement('div');
@@ -494,15 +493,10 @@
         });
     }
 
-    // ==================== 订单 ====================
-    document.getElementById('submitOrderBtn').addEventListener('click', async () => {
-        if (currentUser.role !== 'sales') return;
-        await ensureAuth();
-        const orderData = await buildOrderObject();
-        if (!orderData) return;
+    // ==================== 订单核心逻辑 ====================
+    async function submitSingleOrder(orderData) {
         if (currentUser.balance < orderData.totalCost) {
-            alert(`余额不足！需要 ${orderData.totalCost} 元，当前余额 ${currentUser.balance.toFixed(2)} 元`);
-            return;
+            return { success: false, error: '余额不足' };
         }
         const userRef = db.collection('users').doc(currentUser.id);
         try {
@@ -520,24 +514,23 @@
                     balanceAfter: currentBalance - orderData.totalCost
                 });
             });
-            document.getElementById('orderMsg').textContent = '提交成功';
-            clearOrderForm();
-            renderOrders();
-            loadMyBalance();
+            currentUser.balance -= orderData.totalCost;
+            return { success: true };
         } catch (e) {
-            alert('提交失败: ' + e.message);
+            return { success: false, error: e.message };
         }
-    });
+    }
 
-    async function buildOrderObject() {
+    // 从表单构建订单对象（手动提交）
+    async function buildOrderFromForm() {
         const recName = document.getElementById('recName').value.trim();
         const recPhone = document.getElementById('recPhone').value.trim();
         const recAddress = document.getElementById('recAddress').value.trim();
         if (!recName || !recPhone || !recAddress) { alert('收件人信息必填'); return null; }
         const items = [];
         let totalItemCost = 0;
-        document.querySelectorAll('.sku-select').forEach((sel, idx) => {
-            const sku = sel.value;
+        document.querySelectorAll('.sku-input').forEach((inp, idx) => {
+            const sku = inp.value.trim();
             const qty = parseInt(document.querySelectorAll('.sku-qty')[idx].value) || 0;
             if (sku && qty > 0) {
                 const prod = allProducts.find(p => p.sku === sku);
@@ -547,9 +540,8 @@
                 totalItemCost += cost;
             }
         });
-        const totalBoxes = parseInt(document.getElementById('totalBoxes').value) || 0;
-        const quantity = totalBoxes || items.reduce((s, i) => s + i.quantity, 0);
-        const shippingFee = calcShipping(quantity);
+        const totalQuantity = items.reduce((s, i) => s + i.quantity, 0);
+        const shippingFee = calcShipping(totalQuantity);
         const totalCost = totalItemCost + shippingFee;
         return {
             recName, recPhone, recAddress,
@@ -559,11 +551,57 @@
             shopName: document.getElementById('shopName').value.trim(),
             productName: document.getElementById('productName').value.trim(),
             material: document.getElementById('material').value.trim(),
-            totalBoxes,
+            totalBoxes: parseInt(document.getElementById('totalBoxes').value) || 1,
+            totalQuantity,
             items,
             shippingFee,
             totalCost,
             remark: document.getElementById('remark').value.trim(),
+            trackingNumber: ''
+        };
+    }
+
+    // 从批量导入行构建订单对象（列索引严格按模板）
+    function buildOrderFromRow(row) {
+        // 列顺序：0填表日期,1来源,2物流单号,3收件人姓名,4收件人地址,5收件邮编,6收件电话,7发货箱数,8目的地,9订单号,10店铺名称,11品名,12描述(材质),13商品数量,14商品1SKU,15产品1数量,16商品2SKU,17产品2数量,18商品3SKU,19产品3数量,20商品4SKU,21产品4数量,22商品5SKU,23产品5数量
+        const items = [];
+        let totalItemCost = 0;
+        for (let i = 0; i < 5; i++) {
+            const sku = String(row[14 + i*2] || '').trim();
+            const qty = parseInt(row[15 + i*2]) || 0;
+            if (sku && qty > 0) {
+                const prod = allProducts.find(p => p.sku === sku);
+                const price = prod ? prod.price : 0;
+                const cost = price * qty;
+                items.push({ sku, quantity: qty, unitPrice: price, cost });
+                totalItemCost += cost;
+            }
+        }
+        const calculatedQty = items.reduce((s, i) => s + i.quantity, 0);
+        // 商品数量列：如果有值且为数字则使用，否则使用计算值
+        const manualQty = parseInt(row[13]);
+        const totalQuantity = (!isNaN(manualQty) && manualQty > 0) ? manualQty : calculatedQty;
+        const shippingFee = calcShipping(calculatedQty); // 按实际SKU数量之和计算运费
+        const totalCost = totalItemCost + shippingFee;
+        return {
+            fillDate: String(row[0] || '').trim(),
+            source: String(row[1] || '').trim(),
+            logisticsNo: String(row[2] || '').trim(),
+            recName: String(row[3] || '').trim(),
+            recAddress: String(row[4] || '').trim(),
+            recZip: String(row[5] || '').trim(),
+            recPhone: String(row[6] || '').trim(),
+            totalBoxes: parseInt(row[7]) || 1,
+            recDest: String(row[8] || '').trim() || 'TYO',
+            orderNo: String(row[9] || '').trim() || generateOrderNo(),
+            shopName: String(row[10] || '').trim(),
+            productName: String(row[11] || '').trim(),
+            material: String(row[12] || '').trim(),
+            totalQuantity,
+            items,
+            shippingFee,
+            totalCost,
+            remark: '',
             trackingNumber: ''
         };
     }
@@ -576,10 +614,66 @@
         ['recName','recPhone','recAddress','recZip','recDest','orderNo','shopName','productName','material','remark'].forEach(id => document.getElementById(id).value = '');
         document.getElementById('totalBoxes').value = '1';
         document.querySelectorAll('.sku-qty').forEach(inp => inp.value = '0');
-        document.querySelectorAll('.sku-select').forEach(sel => sel.value = '');
+        document.querySelectorAll('.sku-input').forEach(inp => inp.value = '');
         updateFeePreview();
     }
 
+    // 手动提交
+    document.getElementById('submitOrderBtn').addEventListener('click', async () => {
+        if (currentUser.role !== 'sales') return;
+        await ensureAuth();
+        const orderData = await buildOrderFromForm();
+        if (!orderData) return;
+        const res = await submitSingleOrder(orderData);
+        if (res.success) {
+            document.getElementById('orderMsg').textContent = '提交成功';
+            clearOrderForm();
+            renderOrders();
+            loadMyBalance();
+        } else {
+            alert('提交失败: ' + (res.error || '未知错误'));
+        }
+    });
+
+    // 批量导入
+    document.getElementById('batchImportBtn').addEventListener('click', async () => {
+        if (currentUser.role !== 'sales') return;
+        await ensureAuth();
+        const file = document.getElementById('batchOrderFile').files[0];
+        if (!file) { alert('请选择Excel文件'); return; }
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            const data = new Uint8Array(e.target.result);
+            const wb = XLSX.read(data, { type: 'array' });
+            const ws = wb.Sheets[wb.SheetNames[0]];
+            const rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
+            if (rows.length < 2) { alert('文件无数据'); return; }
+            let successCount = 0, failCount = 0;
+            document.getElementById('batchImportMsg').textContent = '正在导入...';
+            for (let i = 1; i < rows.length; i++) {
+                const orderData = buildOrderFromRow(rows[i]);
+                if (!orderData.recName || orderData.items.length === 0) continue;
+                const res = await submitSingleOrder(orderData);
+                if (res.success) successCount++;
+                else failCount++;
+            }
+            document.getElementById('batchImportMsg').textContent = `导入完成：成功 ${successCount} 条，失败 ${failCount} 条`;
+            renderOrders();
+            loadMyBalance();
+        };
+        reader.readAsArrayBuffer(file);
+    });
+
+    // 下载模板
+    document.getElementById('downloadTemplateBtn').addEventListener('click', () => {
+        const headers = ['填表日期', '来源', '物流单号', '收件人姓名', '收件人地址', '收件邮编', '收件电话', '发货箱数', '目的地', '订单号', '店铺名称', '品名', '描述(材质）', '商品数量', '商品1SKU', '产品1数量', '商品2SKU', '产品2数量', '商品3SKU', '产品3数量', '商品4SKU', '产品4数量', '商品5SKU', '产品5数量'];
+        const ws = XLSX.utils.aoa_to_sheet([headers]);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, '模板');
+        XLSX.writeFile(wb, '金海嘉运批量导入模板.xlsx');
+    });
+
+    // ==================== 订单列表与冲销 ====================
     async function renderOrders() {
         await ensureAuth();
         const tbody = document.querySelector('#ordersTable tbody');
@@ -599,14 +693,15 @@
             btn.addEventListener('click', async (e) => {
                 await ensureAuth();
                 const orderId = e.target.dataset.orderid;
-                const doc = await db.collection('orders').doc(orderId).get();
-                if (!doc.exists) return;
-                const original = doc.data();
+                const docSnap = await db.collection('orders').doc(orderId).get();
+                if (!docSnap.exists) return;
+                const original = docSnap.data();
                 if (!confirm('确认冲销该订单吗？将生成负数对冲记录。')) return;
                 const reversal = {
                     ...original,
                     orderNo: generateOrderNo(),
                     totalBoxes: -original.totalBoxes,
+                    totalQuantity: -original.totalQuantity,
                     items: original.items.map(i => ({...i, quantity: -i.quantity, cost: -i.cost})),
                     shippingFee: 0,
                     totalCost: -original.totalCost,
@@ -614,16 +709,17 @@
                     reversalFor: original.orderNo,
                     timestamp: firebase.firestore.FieldValue.serverTimestamp(),
                     balanceBefore: currentUser.balance,
-                    balanceAfter: currentUser.balance - (-original.totalCost),
+                    balanceAfter: currentUser.balance + original.totalCost,
                     trackingNumber: ''
                 };
                 const userRef = db.collection('users').doc(currentUser.id);
                 await db.runTransaction(async (transaction) => {
                     const userDoc = await transaction.get(userRef);
-                    const newBalance = (userDoc.data().balance || 0) - reversal.totalCost;
+                    const newBalance = (userDoc.data().balance || 0) + original.totalCost;
                     transaction.update(userRef, { balance: newBalance });
                     transaction.set(db.collection('orders').doc(), reversal);
                 });
+                currentUser.balance += original.totalCost;
                 loadMyBalance();
                 renderOrders();
                 alert('冲销成功');
@@ -632,11 +728,11 @@
     }
 
     // ==================== 导出功能 ====================
-    async function getOrdersInRange(startDate, endDate, usernameFilter = null) {
+    async function getOrdersInRange(start, end, usernameFilter = null) {
         await ensureAuth();
         let query = db.collection('orders').orderBy('timestamp');
-        if (startDate) query = query.where('timestamp', '>=', new Date(startDate));
-        if (endDate) query = query.where('timestamp', '<=', new Date(endDate + 'T23:59:59'));
+        if (start) query = query.where('timestamp', '>=', new Date(start));
+        if (end) query = query.where('timestamp', '<=', new Date(end + 'T23:59:59'));
         const snap = await query.get();
         let orders = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         if (usernameFilter) orders = orders.filter(o => o.username === usernameFilter);
@@ -649,21 +745,13 @@
         const orders = await getOrdersInRange(start, end, currentUser.username);
         const data = orders.map(o => ({
             '时间': o.timestamp ? new Date(o.timestamp.toDate()).toLocaleString() : '',
-            '订单号': o.orderNo,
-            '收件人': o.recName,
-            '电话': o.recPhone,
-            '地址': o.recAddress,
-            '品名': o.productName,
-            '材质': o.material,
-            '总箱数': o.totalBoxes,
+            '订单号': o.orderNo, '收件人': o.recName, '电话': o.recPhone, '地址': o.recAddress,
+            '品名': o.productName, '材质': o.material, '总箱数': o.totalBoxes, '商品数量': o.totalQuantity || 0,
             'SKU明细': o.items.map(i => `${i.sku}x${i.quantity}`).join('; '),
             '商品费用': o.items.reduce((s,i)=>s+i.cost,0).toFixed(2),
-            '运费': o.shippingFee,
-            '总费用': o.totalCost,
-            '申请时余额': o.balanceBefore,
-            '扣减后余额': o.balanceAfter,
-            '快递单号': o.trackingNumber,
-            '备注': o.remark
+            '运费': o.shippingFee, '总费用': o.totalCost,
+            '申请时余额': o.balanceBefore, '扣减后余额': o.balanceAfter,
+            '快递单号': o.trackingNumber, '备注': o.remark
         }));
         downloadXlsx(data, `我的订单_${start}_${end}`);
     });
@@ -673,31 +761,20 @@
         const end = document.getElementById('adminEndDate').value;
         const orders = await getOrdersInRange(start, end);
         const groups = {};
-        orders.forEach(o => {
-            if (!groups[o.username]) groups[o.username] = [];
-            groups[o.username].push(o);
-        });
+        orders.forEach(o => { if(!groups[o.username]) groups[o.username] = []; groups[o.username].push(o); });
         const wb = XLSX.utils.book_new();
         for (const [username, userOrders] of Object.entries(groups)) {
             const data = userOrders.map(o => ({
                 '时间': o.timestamp ? new Date(o.timestamp.toDate()).toLocaleString() : '',
-                '订单号': o.orderNo,
-                '收件人': o.recName,
-                '电话': o.recPhone,
-                '地址': o.recAddress,
-                '品名': o.productName,
-                '材质': o.material,
-                '总箱数': o.totalBoxes,
+                '订单号': o.orderNo, '收件人': o.recName, '电话': o.recPhone, '地址': o.recAddress,
+                '品名': o.productName, '材质': o.material, '总箱数': o.totalBoxes, '商品数量': o.totalQuantity || 0,
                 'SKU明细': o.items.map(i => `${i.sku}x${i.quantity}`).join('; '),
                 '商品费用': o.items.reduce((s,i)=>s+i.cost,0).toFixed(2),
-                '运费': o.shippingFee,
-                '总费用': o.totalCost,
+                '运费': o.shippingFee, '总费用': o.totalCost,
                 '余额变动': `${o.balanceBefore} → ${o.balanceAfter}`,
-                '快递单号': o.trackingNumber,
-                '备注': o.remark
+                '快递单号': o.trackingNumber, '备注': o.remark
             }));
-            const ws = XLSX.utils.json_to_sheet(data);
-            XLSX.utils.book_append_sheet(wb, ws, username);
+            XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), username);
         }
         XLSX.writeFile(wb, `全部销售商订单_${start}_${end}.xlsx`);
     });
@@ -707,13 +784,8 @@
         const end = document.getElementById('adminEndDate').value;
         const orders = await getOrdersInRange(start, end);
         const skuMap = {};
-        orders.forEach(o => {
-            o.items.forEach(i => {
-                if (!skuMap[i.sku]) skuMap[i.sku] = 0;
-                skuMap[i.sku] += i.quantity;
-            });
-        });
-        const data = Object.entries(skuMap).map(([sku, qty]) => ({ 'SKU': sku, '需求数量': qty }));
+        orders.forEach(o => o.items.forEach(i => { skuMap[i.sku] = (skuMap[i.sku] || 0) + i.quantity; }));
+        const data = Object.entries(skuMap).map(([sku, qty]) => ({ SKU: sku, '需求数量': qty }));
         downloadXlsx(data, `商品需求汇总_${start}_${end}`);
     });
 
@@ -722,38 +794,28 @@
         const end = document.getElementById('adminEndDate').value;
         const orders = await getOrdersInRange(start, end);
         const data = orders.filter(o => o.totalCost > 0).map(o => ({
-            '订单号': o.orderNo,
-            '收件人': o.recName,
-            '地址': o.recAddress,
-            '商品': o.productName,
-            '数量': o.totalBoxes,
-            '快递单号': ''
+            '订单号': o.orderNo, '收件人': o.recName, '地址': o.recAddress,
+            '商品': o.productName, '数量': o.totalBoxes, '快递单号': ''
         }));
         downloadXlsx(data, `快递模板_${start}_${end}`);
     });
 
     document.getElementById('importExpressBtn').addEventListener('click', async () => {
         await ensureAuth();
-        const fileInput = document.getElementById('expressFile');
-        const file = fileInput.files[0];
+        const file = document.getElementById('expressFile').files[0];
         if (!file) { alert('请选择Excel文件'); return; }
         const reader = new FileReader();
         reader.onload = async (e) => {
             const data = new Uint8Array(e.target.result);
             const wb = XLSX.read(data, { type: 'array' });
-            const ws = wb.Sheets[wb.SheetNames[0]];
-            const rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
+            const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1 });
             if (rows.length < 2) { alert('文件无数据'); return; }
-            const batch = db.batch();
-            let count = 0;
+            const batch = db.batch(); let count = 0;
             for (let i = 1; i < rows.length; i++) {
                 const [orderNo, , , , trackingNo] = rows[i];
                 if (!orderNo || !trackingNo) continue;
                 const q = await db.collection('orders').where('orderNo', '==', String(orderNo)).get();
-                q.forEach(doc => {
-                    batch.update(doc.ref, { trackingNumber: String(trackingNo) });
-                    count++;
-                });
+                q.forEach(doc => { batch.update(doc.ref, { trackingNumber: String(trackingNo) }); count++; });
             }
             await batch.commit();
             document.getElementById('importMsg').textContent = `成功更新 ${count} 条快递单号`;
@@ -773,15 +835,9 @@
         await ensureAuth();
         const q = await db.collection('users').where('username', '==', ADMIN_USER).get();
         if (q.empty) {
-            await db.collection('users').add({
-                username: ADMIN_USER,
-                password: ADMIN_PASS,
-                role: 'admin',
-                balance: 0
-            });
+            await db.collection('users').add({ username: ADMIN_USER, password: ADMIN_PASS, role: 'admin', balance: 0 });
         }
     }
-
     initAdminUser();
 </script>
 </body>
