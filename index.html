@@ -66,7 +66,7 @@
         <div id="tab-orders" class="tab-content">
             <div class="card" id="orderFormCard">
                 <h2>📝 快速录入订单（从Excel复制粘贴）</h2>
-                <p style="font-size:13px;color:#666">请将Excel中的数据直接复制，然后粘贴到下方方框。列顺序：填表日期、来源、物流单号、收件人姓名、收件人地址、收件邮编、收件电话、发货箱数、目的地、订单号、店铺名称、品名、描述(材质）、商品数量、商品1SKU、产品1数量……商品5SKU、产品5数量（共24列，可只粘贴有数据的列）</p>
+                <p style="font-size:13px;color:#666">直接从 Excel 复制数据（列顺序：填表日期、来源、物流单号、收件人姓名、收件人地址、收件邮编、收件电话、发货箱数、目的地、订单号、店铺名称、品名、描述(材质）、商品数量、商品1SKU、产品1数量……商品5SKU、产品5数量），粘贴到下方方框，点击预览即可自动计算费用。</p>
                 <textarea id="pasteArea" placeholder="在此粘贴从Excel复制的数据..."></textarea>
                 <button id="previewPasteBtn">🔍 预览并提交</button>
                 <div id="pastePreview" style="margin-top:12px"></div>
@@ -295,23 +295,54 @@
         } catch(e) { return {success:false, error:e.message}; }
     }
 
-    // 从粘贴的行构建订单对象（支持24列基础数据）
+    // 解析粘贴的行，返回订单对象和错误信息
     function parsePastedRow(row) {
-        const items=[]; let totalItemCost=0;
+        const items = [];
+        let totalItemCost = 0;
+        const errors = [];  // 记录错误的SKU
         for(let i=0;i<5;i++){
-            const sku=String(row[14+i*2]||'').trim(), qty=parseInt(row[15+i*2])||0;
-            if(sku&&qty>0){ const prod=allProducts.find(p=>p.sku===sku); const price=prod?prod.price:0, cost=price*qty; items.push({sku,quantity:qty,unitPrice:price,cost}); totalItemCost+=cost; }
+            const sku = String(row[14+i*2] || '').trim();
+            const qty = parseInt(row[15+i*2]) || 0;
+            if(sku && qty > 0) {
+                const prod = allProducts.find(p => p.sku === sku);
+                if(prod) {
+                    const price = prod.price;
+                    const cost = price * qty;
+                    items.push({ sku, quantity: qty, unitPrice: price, cost });
+                    totalItemCost += cost;
+                } else {
+                    // SKU未找到
+                    errors.push(sku);
+                    // 仍然将SKU加入items，但单价为0，保留数量
+                    items.push({ sku, quantity: qty, unitPrice: 0, cost: 0 });
+                }
+            }
         }
-        const calcQty = items.reduce((s,i)=>s+i.quantity,0);
-        const totalQuantity = (row[13]&&!isNaN(parseInt(row[13]))?parseInt(row[13]):calcQty);
+        const calcQty = items.reduce((s,i) => s + i.quantity, 0);
+        const totalQuantity = (row[13] && !isNaN(parseInt(row[13]))) ? parseInt(row[13]) : calcQty;
         const shippingFee = calcShipping(calcQty);
+        const totalCost = totalItemCost + shippingFee;
         return {
-            recName:String(row[3]||'').trim(), recPhone:String(row[6]||'').trim(), recAddress:String(row[4]||'').trim(),
-            recZip:String(row[5]||'').trim(), recDest:String(row[8]||'').trim()||'TYO',
-            orderNo: row[9]?String(row[9]).trim():generateOrderNo(),
-            shopName:String(row[10]||'').trim(), productName:String(row[11]||'').trim(), material:String(row[12]||'').trim(),
-            totalBoxes:parseInt(row[7])||1, totalQuantity, items, shippingFee, totalCost:totalItemCost+shippingFee,
-            remark:'', trackingNumber:String(row[2]||'').trim(), source:String(row[1]||'').trim()
+            orderData: {
+                recName: String(row[3] || '').trim(),
+                recPhone: String(row[6] || '').trim(),
+                recAddress: String(row[4] || '').trim(),
+                recZip: String(row[5] || '').trim(),
+                recDest: String(row[8] || '').trim() || 'TYO',
+                orderNo: row[9] ? String(row[9]).trim() : generateOrderNo(),
+                shopName: String(row[10] || '').trim(),
+                productName: String(row[11] || '').trim(),
+                material: String(row[12] || '').trim(),
+                totalBoxes: parseInt(row[7]) || 1,
+                totalQuantity,
+                items,
+                shippingFee,
+                totalCost,
+                remark: '',
+                trackingNumber: String(row[2] || '').trim(),
+                source: String(row[1] || '').trim()
+            },
+            errors
         };
     }
 
@@ -321,32 +352,50 @@
         if(!raw) return;
         const lines = raw.split('\n').filter(l=>l.trim());
         const rows = lines.map(l=>l.split('\t'));
-        if(rows[0] && (rows[0][0]==='填表日期' || rows[0][3]==='收件人姓名')) rows.shift(); // 移除标题行
-        let previewHtml = '<table><tr><th>收件人</th><th>品名</th><th>数量</th><th>运费</th><th>总费用</th><th>状态</th></tr>';
+        if(rows.length && (rows[0][0]==='填表日期' || rows[0][3]==='收件人姓名')) rows.shift();
+        let previewHtml = '<table><tr><th>收件人</th><th>商品SKU</th><th>运费</th><th>总费用</th><th>状态</th></tr>';
         const previewOrders = [];
         for(const row of rows){
-            if(row.length<4) continue;
-            const od = parsePastedRow(row);
-            if(!od.recName || od.items.length===0) continue;
-            const valid = currentUser.balance >= od.totalCost;
-            previewOrders.push({od,valid});
-            previewHtml += `<tr><td>${od.recName}</td><td>${od.productName}</td><td>${od.totalQuantity}</td><td>${od.shippingFee}</td><td>${od.totalCost.toFixed(2)}</td><td style="color:${valid?'green':'red'}">${valid?'可提交':'余额不足'}</td></tr>`;
+            if(row.length < 4) continue;
+            const { orderData, errors } = parsePastedRow(row);
+            if(!orderData.recName || orderData.items.length === 0) continue;
+            // 生成状态文字
+            let status = '';
+            if(errors.length > 0) {
+                status = 'SKU错误';
+            } else if(currentUser.balance < orderData.totalCost) {
+                status = '余额不足';
+            } else {
+                status = '可提交';
+            }
+            const valid = (errors.length === 0 && currentUser.balance >= orderData.totalCost);
+            // 商品SKU列显示
+            const skuDisplay = orderData.items.map(i => `${i.sku} x${i.quantity}`).join(', ');
+            previewOrders.push({ orderData, valid, status });
+            previewHtml += `<tr>
+                <td>${orderData.recName}</td>
+                <td>${skuDisplay}</td>
+                <td>${orderData.shippingFee}</td>
+                <td>${orderData.totalCost.toFixed(2)}</td>
+                <td style="color:${valid?'green':'red'}">${status}</td>
+            </tr>`;
         }
-        if(previewOrders.length===0){ previewHtml+='<tr><td colspan="6">无有效数据</td></tr>'; }
-        previewHtml+='</table>';
-        const totalFee = previewOrders.filter(p=>p.valid).reduce((s,p)=>s+p.od.shippingFee,0);
-        const totalAmount = previewOrders.filter(p=>p.valid).reduce((s,p)=>s+p.od.totalCost,0);
-        previewHtml+=`<p>总计：${previewOrders.length}条，可提交${previewOrders.filter(p=>p.valid).length}条 | 运费${totalFee}元 | 总金额${totalAmount}元</p>`;
-        previewHtml+='<button id="confirmPasteBtn" class="btn-success">✅ 确认提交</button>';
+        if(previewOrders.length === 0){ previewHtml += '<tr><td colspan="5">无有效数据</td></tr>'; }
+        previewHtml += '</table>';
+        const validOrders = previewOrders.filter(p => p.valid);
+        const totalFee = validOrders.reduce((s,p) => s + p.orderData.shippingFee, 0);
+        const totalAmount = validOrders.reduce((s,p) => s + p.orderData.totalCost, 0);
+        previewHtml += `<p>总计：${previewOrders.length} 条，可提交 ${validOrders.length} 条 | 运费 ${totalFee} 元 | 总金额 ${totalAmount} 元</p>`;
+        previewHtml += '<button id="confirmPasteBtn" class="btn-success">✅ 确认提交</button>';
         document.getElementById('pastePreview').innerHTML = previewHtml;
         document.getElementById('confirmPasteBtn').addEventListener('click', async ()=>{
-            let succ=0,fail=0;
+            let succ=0, fail=0;
             for(const p of previewOrders){
-                if(!p.valid){fail++;continue;}
-                const res = await submitSingleOrder(p.od);
+                if(!p.valid){ fail++; continue; }
+                const res = await submitSingleOrder(p.orderData);
                 if(res.success) succ++; else fail++;
             }
-            document.getElementById('pastePreview').innerHTML = `提交完成：成功${succ}条，失败${fail}条 | 运费${totalFee}元 | 总金额${totalAmount}元`;
+            document.getElementById('pastePreview').innerHTML = `提交完成：成功 ${succ} 条，失败 ${fail} 条 | 运费 ${totalFee} 元 | 总金额 ${totalAmount} 元`;
             document.getElementById('pasteArea').value = '';
             renderOrders(); loadMyBalance();
         });
