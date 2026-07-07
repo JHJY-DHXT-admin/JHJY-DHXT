@@ -11,7 +11,7 @@
     <style>
         *{box-sizing:border-box;margin:0;padding:0}
         body{font-family:system-ui,sans-serif;background:#f0f2f5;display:flex;justify-content:center;padding:16px;min-height:100vh}
-        .container{max-width:1200px;width:100%}
+        .container{max-width:1300px;width:100%}
         .card{background:white;border-radius:12px;padding:20px;margin-bottom:20px;box-shadow:0 2px 8px rgba(0,0,0,0.08)}
         h2{margin-bottom:16px}
         label{display:block;margin-bottom:6px;font-weight:500}
@@ -34,7 +34,8 @@
         .brand{font-size:20px;font-weight:bold;color:#1677ff}
         .highlight{background:#fff7e6;font-weight:bold}
         #pasteArea{width:100%;min-height:120px;font-family:monospace;font-size:13px}
-        .inline-edit{width:120px}
+        .inline-edit{width:140px}
+        .datetime-input{width:100%}
     </style>
 </head>
 <body>
@@ -73,18 +74,23 @@
                 <hr>
                 <button id="downloadTemplateBtn" class="btn-success">📋 下载标准模板（Excel）</button>
             </div>
-            <div class="card">
-                <div style="display:flex;justify-content:space-between">
-                    <h2>📋 订单列表</h2>
-                    <button id="exportMyOrdersBtn" class="btn-success">⬇️ 导出Excel</button>
+            <div class="card" id="ordersViewCard">
+                <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap">
+                    <h2>📋 订单实时视图</h2>
+                    <div style="display:flex;gap:8px;align-items:center">
+                        <button id="exportFilteredOrdersBtn" class="btn-success">⬇️ 导出当前视图订单</button>
+                    </div>
                 </div>
-                <div class="row-flex">
-                    <div><label>开始</label><input type="date" id="orderStartDate"></div>
-                    <div><label>结束</label><input type="date" id="orderEndDate"></div>
-                    <div><button id="filterOrdersBtn">🔍 查询</button></div>
+                <!-- 管理员切换销售商 -->
+                <div id="adminSalesSelector" style="display:none;margin-bottom:12px">
+                    <label>选择销售商查看：</label>
+                    <select id="salesSelect"><option value="all">全部销售商</option></select>
                 </div>
                 <div style="overflow-x:auto">
-                    <table id="ordersTable"><thead><tr><th>时间</th><th>订单号</th><th>收件人</th><th>品名</th><th>总费用</th><th>快递单号</th><th>操作</th></tr></thead><tbody></tbody></table>
+                    <table id="ordersTable">
+                        <thead><tr><th>时间</th><th>订单号</th><th>收件人</th><th>品名</th><th>总费用</th><th>快递单号</th><th>操作</th></tr></thead>
+                        <tbody></tbody>
+                    </table>
                 </div>
             </div>
         </div>
@@ -127,16 +133,22 @@
                 <button id="saveShippingBtn">💾 保存</button>
             </div>
             <div class="card">
-                <h2>📊 管理导出</h2>
-                <div class="row-flex"><div><label>开始</label><input type="date" id="adminStartDate"></div><div><label>结束</label><input type="date" id="adminEndDate"></div></div>
+                <h2>📊 管理导出（精确到分钟）</h2>
+                <div class="row-flex">
+                    <div><label>开始时间</label><input type="datetime-local" id="adminStartDate" class="datetime-input"></div>
+                    <div><label>结束时间</label><input type="datetime-local" id="adminEndDate" class="datetime-input"></div>
+                </div>
                 <div><label><input type="checkbox" id="exportUnexportedOnly" checked> 仅未导出</label></div>
-                <button id="exportAllBtn" class="btn-success">⬇️ 分销售商导出</button>
+                <button id="exportAllBtn" class="btn-success">⬇️ 分销售商导出全部订单</button>
                 <button id="exportSummaryBtn" class="btn-success">📊 商品需求汇总</button>
             </div>
             <div class="card">
-                <h2>📈 营业统计</h2>
-                <div class="row-flex"><div><label>开始</label><input type="date" id="statsStartDate"></div><div><label>结束</label><input type="date" id="statsEndDate"></div></div>
-                <button id="loadStatsBtn">📊 查看</button>
+                <h2>📈 营业统计（精确到分钟）</h2>
+                <div class="row-flex">
+                    <div><label>开始时间</label><input type="datetime-local" id="statsStartDate" class="datetime-input"></div>
+                    <div><label>结束时间</label><input type="datetime-local" id="statsEndDate" class="datetime-input"></div>
+                </div>
+                <button id="loadStatsBtn">📊 查看统计</button>
                 <div id="statsResult"></div>
             </div>
         </div>
@@ -156,6 +168,9 @@
     firebase.initializeApp(firebaseConfig);
     const auth = firebase.auth(), db = firebase.firestore();
     let currentUser = null, allProducts = [], shippingRule = { threshold: 4, low: 18, high: 35 };
+    let ordersUnsubscribe = null; // 实时监听取消函数
+
+    // 统一模板头
     const TEMPLATE_HEADERS = ['填表日期','来源','物流单号','收件人姓名','收件人地址','收件邮编','收件电话','发货箱数','目的地','订单号','店铺名称','品名','描述(材质）','商品数量','商品1SKU','产品1数量','商品2SKU','产品2数量','商品3SKU','产品3数量','商品4SKU','产品4数量','商品5SKU','产品5数量','商品费用','运费','总费用','申请时余额','扣减后余额','余额变动','备注','是否已导出'];
 
     async function ensureAuth() { if (auth.currentUser) return auth.currentUser; return auth.signInAnonymously(); }
@@ -183,18 +198,27 @@
             document.getElementById('navAdminUsers').style.display='inline';
             document.getElementById('navAdminSettings').style.display='inline';
             document.getElementById('orderFormCard').style.display='none';
+            document.getElementById('adminSalesSelector').style.display='block';
+            loadSalesSelect();
         } else {
             document.getElementById('orderFormCard').style.display='block';
+            document.getElementById('adminSalesSelector').style.display='none';
         }
         loadProducts(); loadShippingRule(); loadMyBalance(); switchTab('tab-orders');
     }
 
-    document.getElementById('logoutBtn').addEventListener('click', async () => { await auth.signOut(); currentUser=null; document.getElementById('mainPage').style.display='none'; document.getElementById('loginPage').style.display='block'; });
+    document.getElementById('logoutBtn').addEventListener('click', async () => {
+        if(ordersUnsubscribe) ordersUnsubscribe();
+        await auth.signOut();
+        currentUser=null;
+        document.getElementById('mainPage').style.display='none';
+        document.getElementById('loginPage').style.display='block';
+    });
     document.querySelectorAll('.nav-link').forEach(l=>l.addEventListener('click', ()=>switchTab(l.dataset.tab)));
     function switchTab(tabId) {
         document.querySelectorAll('.tab-content').forEach(t=>t.classList.add('hidden'));
         document.getElementById(tabId).classList.remove('hidden');
-        if(tabId==='tab-orders') renderOrders();
+        if(tabId==='tab-orders') startOrdersRealtime();
         if(tabId==='tab-finance') { loadMyBalance(); renderTransactions(); }
         if(tabId==='tab-products') renderProductList();
         if(tabId==='tab-users') renderUserList();
@@ -295,133 +319,94 @@
         } catch(e) { return {success:false, error:e.message}; }
     }
 
-    // 解析粘贴的行，返回订单对象和错误信息
+    // 粘贴解析
     function parsePastedRow(row) {
-        const items = [];
-        let totalItemCost = 0;
-        const errors = [];  // 记录错误的SKU
+        const items=[]; let totalItemCost=0; const errors=[];
         for(let i=0;i<5;i++){
-            const sku = String(row[14+i*2] || '').trim();
-            const qty = parseInt(row[15+i*2]) || 0;
-            if(sku && qty > 0) {
-                const prod = allProducts.find(p => p.sku === sku);
-                if(prod) {
-                    const price = prod.price;
-                    const cost = price * qty;
-                    items.push({ sku, quantity: qty, unitPrice: price, cost });
-                    totalItemCost += cost;
-                } else {
-                    // SKU未找到
-                    errors.push(sku);
-                    // 仍然将SKU加入items，但单价为0，保留数量
-                    items.push({ sku, quantity: qty, unitPrice: 0, cost: 0 });
-                }
+            const sku=String(row[14+i*2]||'').trim(), qty=parseInt(row[15+i*2])||0;
+            if(sku&&qty>0){
+                const prod=allProducts.find(p=>p.sku===sku);
+                if(prod){ const cost=prod.price*qty; items.push({sku,quantity:qty,unitPrice:prod.price,cost}); totalItemCost+=cost; }
+                else { errors.push(sku); items.push({sku,quantity:qty,unitPrice:0,cost:0}); }
             }
         }
-        const calcQty = items.reduce((s,i) => s + i.quantity, 0);
-        const totalQuantity = (row[13] && !isNaN(parseInt(row[13]))) ? parseInt(row[13]) : calcQty;
-        const shippingFee = calcShipping(calcQty);
-        const totalCost = totalItemCost + shippingFee;
+        const calcQty=items.reduce((s,i)=>s+i.quantity,0);
+        const totalQuantity=(row[13]&&!isNaN(parseInt(row[13])))?parseInt(row[13]):calcQty;
+        const shippingFee=calcShipping(calcQty);
         return {
-            orderData: {
-                recName: String(row[3] || '').trim(),
-                recPhone: String(row[6] || '').trim(),
-                recAddress: String(row[4] || '').trim(),
-                recZip: String(row[5] || '').trim(),
-                recDest: String(row[8] || '').trim() || 'TYO',
-                orderNo: row[9] ? String(row[9]).trim() : generateOrderNo(),
-                shopName: String(row[10] || '').trim(),
-                productName: String(row[11] || '').trim(),
-                material: String(row[12] || '').trim(),
-                totalBoxes: parseInt(row[7]) || 1,
-                totalQuantity,
-                items,
-                shippingFee,
-                totalCost,
-                remark: '',
-                trackingNumber: String(row[2] || '').trim(),
-                source: String(row[1] || '').trim()
-            },
-            errors
+            orderData:{
+                recName:String(row[3]||'').trim(), recPhone:String(row[6]||'').trim(), recAddress:String(row[4]||'').trim(),
+                recZip:String(row[5]||'').trim(), recDest:String(row[8]||'').trim()||'TYO',
+                orderNo:row[9]?String(row[9]).trim():generateOrderNo(),
+                shopName:String(row[10]||'').trim(), productName:String(row[11]||'').trim(), material:String(row[12]||'').trim(),
+                totalBoxes:parseInt(row[7])||1, totalQuantity, items, shippingFee, totalCost:totalItemCost+shippingFee,
+                remark:'', trackingNumber:String(row[2]||'').trim(), source:String(row[1]||'').trim()
+            }, errors
         };
     }
 
-    // 粘贴预览
     document.getElementById('previewPasteBtn').addEventListener('click', async ()=>{
-        const raw = document.getElementById('pasteArea').value.trim();
+        const raw=document.getElementById('pasteArea').value.trim();
         if(!raw) return;
-        const lines = raw.split('\n').filter(l=>l.trim());
-        const rows = lines.map(l=>l.split('\t'));
-        if(rows.length && (rows[0][0]==='填表日期' || rows[0][3]==='收件人姓名')) rows.shift();
-        let previewHtml = '<table><tr><th>收件人</th><th>商品SKU</th><th>运费</th><th>总费用</th><th>状态</th></tr>';
-        const previewOrders = [];
+        const lines=raw.split('\n').filter(l=>l.trim());
+        const rows=lines.map(l=>l.split('\t'));
+        if(rows.length && (rows[0][0]==='填表日期'||rows[0][3]==='收件人姓名')) rows.shift();
+        let previewHtml='<table><tr><th>收件人</th><th>商品SKU</th><th>运费</th><th>总费用</th><th>状态</th></tr>';
+        const previewOrders=[];
         for(const row of rows){
-            if(row.length < 4) continue;
-            const { orderData, errors } = parsePastedRow(row);
-            if(!orderData.recName || orderData.items.length === 0) continue;
-            // 生成状态文字
-            let status = '';
-            if(errors.length > 0) {
-                status = 'SKU错误';
-            } else if(currentUser.balance < orderData.totalCost) {
-                status = '余额不足';
-            } else {
-                status = '可提交';
-            }
-            const valid = (errors.length === 0 && currentUser.balance >= orderData.totalCost);
-            // 商品SKU列显示
-            const skuDisplay = orderData.items.map(i => `${i.sku} x${i.quantity}`).join(', ');
-            previewOrders.push({ orderData, valid, status });
-            previewHtml += `<tr>
-                <td>${orderData.recName}</td>
-                <td>${skuDisplay}</td>
-                <td>${orderData.shippingFee}</td>
-                <td>${orderData.totalCost.toFixed(2)}</td>
-                <td style="color:${valid?'green':'red'}">${status}</td>
-            </tr>`;
+            if(row.length<4) continue;
+            const {orderData,errors}=parsePastedRow(row);
+            if(!orderData.recName||orderData.items.length===0) continue;
+            const valid=errors.length===0 && currentUser.balance>=orderData.totalCost;
+            const status=errors.length>0?'SKU错误':(currentUser.balance<orderData.totalCost?'余额不足':'可提交');
+            previewOrders.push({orderData,valid,status});
+            previewHtml+=`<tr><td>${orderData.recName}</td><td>${orderData.items.map(i=>`${i.sku} x${i.quantity}`).join(', ')}</td><td>${orderData.shippingFee}</td><td>${orderData.totalCost.toFixed(2)}</td><td style="color:${valid?'green':'red'}">${status}</td></tr>`;
         }
-        if(previewOrders.length === 0){ previewHtml += '<tr><td colspan="5">无有效数据</td></tr>'; }
-        previewHtml += '</table>';
-        const validOrders = previewOrders.filter(p => p.valid);
-        const totalFee = validOrders.reduce((s,p) => s + p.orderData.shippingFee, 0);
-        const totalAmount = validOrders.reduce((s,p) => s + p.orderData.totalCost, 0);
-        previewHtml += `<p>总计：${previewOrders.length} 条，可提交 ${validOrders.length} 条 | 运费 ${totalFee} 元 | 总金额 ${totalAmount} 元</p>`;
-        previewHtml += '<button id="confirmPasteBtn" class="btn-success">✅ 确认提交</button>';
-        document.getElementById('pastePreview').innerHTML = previewHtml;
+        if(previewOrders.length===0){ previewHtml+='<tr><td colspan="5">无有效数据</td></tr>'; }
+        previewHtml+='</table>';
+        const validOrders=previewOrders.filter(p=>p.valid);
+        previewHtml+=`<p>总计：${previewOrders.length}条，可提交${validOrders.length}条 | 运费${validOrders.reduce((s,p)=>s+p.orderData.shippingFee,0)}元 | 总金额${validOrders.reduce((s,p)=>s+p.orderData.totalCost,0).toFixed(2)}元</p>`;
+        previewHtml+='<button id="confirmPasteBtn" class="btn-success">✅ 确认提交</button>';
+        document.getElementById('pastePreview').innerHTML=previewHtml;
         document.getElementById('confirmPasteBtn').addEventListener('click', async ()=>{
-            let succ=0, fail=0;
-            for(const p of previewOrders){
-                if(!p.valid){ fail++; continue; }
-                const res = await submitSingleOrder(p.orderData);
-                if(res.success) succ++; else fail++;
-            }
-            document.getElementById('pastePreview').innerHTML = `提交完成：成功 ${succ} 条，失败 ${fail} 条 | 运费 ${totalFee} 元 | 总金额 ${totalAmount} 元`;
-            document.getElementById('pasteArea').value = '';
-            renderOrders(); loadMyBalance();
+            let succ=0,fail=0;
+            for(const p of previewOrders){ if(!p.valid){fail++;continue;} const res=await submitSingleOrder(p.orderData); if(res.success) succ++; else fail++; }
+            document.getElementById('pastePreview').innerHTML=`提交完成：成功${succ}条，失败${fail}条`;
+            document.getElementById('pasteArea').value='';
+            loadMyBalance();
         });
     });
 
     document.getElementById('downloadTemplateBtn').addEventListener('click', ()=>{
-        const ws = XLSX.utils.aoa_to_sheet([TEMPLATE_HEADERS.slice(0,24)]);
-        const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, '模板');
-        XLSX.writeFile(wb, '金海嘉运标准模板.xlsx');
+        const ws=XLSX.utils.aoa_to_sheet([TEMPLATE_HEADERS.slice(0,24)]);
+        const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'模板');
+        XLSX.writeFile(wb,'金海嘉运标准模板.xlsx');
     });
 
-    // ==================== 订单列表 ====================
-    document.getElementById('filterOrdersBtn').addEventListener('click', ()=>renderOrders());
-    async function renderOrders() {
-        const tbody = document.querySelector('#ordersTable tbody'); tbody.innerHTML='';
-        let q = db.collection('orders').orderBy('timestamp','desc');
-        if(currentUser.role==='sales') q = q.where('userId','==',currentUser.id);
-        const start = document.getElementById('orderStartDate').value, end = document.getElementById('orderEndDate').value;
-        if(start) q = q.where('timestamp','>=',new Date(start));
-        if(end) q = q.where('timestamp','<=',new Date(end+'T23:59:59'));
-        const snap = await q.limit(200).get();
-        snap.forEach(doc=>{
-            const o = doc.data();
+    // ==================== 实时订单表格 ====================
+    function startOrdersRealtime() {
+        if(ordersUnsubscribe) ordersUnsubscribe();
+        let query = db.collection('orders').orderBy('timestamp','desc');
+        // 销售商只看自己的
+        if(currentUser.role==='sales') query = query.where('userId','==',currentUser.id);
+        ordersUnsubscribe = query.onSnapshot(snapshot => {
+            renderOrdersTable(snapshot.docs.map(d=>({id:d.id,...d.data()})));
+        });
+    }
+
+    function renderOrdersTable(orders) {
+        // 管理员根据下拉框筛选
+        if(currentUser.role==='admin'){
+            const sel = document.getElementById('salesSelect').value;
+            if(sel!=='all') orders = orders.filter(o=>o.userId===sel);
+        }
+        const tbody = document.querySelector('#ordersTable tbody');
+        tbody.innerHTML = '';
+        orders.forEach(o=>{
             const time = o.timestamp?new Date(o.timestamp.toDate()).toLocaleString():'';
-            const trackingInput = currentUser.role==='admin' ? `<input class="inline-edit" value="${o.trackingNumber||''}" onchange="updateTracking('${doc.id}', this.value)">` : (o.trackingNumber||'');
-            tbody.innerHTML+=`<tr><td>${time}</td><td>${o.orderNo}</td><td>${o.recName}</td><td>${o.productName}</td><td>${o.totalCost.toFixed(2)}</td><td>${trackingInput}</td><td>${currentUser.role==='sales'&&o.totalCost>0?`<button class="btn-danger" onclick="reverseOrder('${doc.id}')">冲销</button>`:''}</td></tr>`;
+            const trackingField = currentUser.role==='admin' ? `<input class="inline-edit" value="${o.trackingNumber||''}" onchange="updateTracking('${o.id}', this.value)">` : (o.trackingNumber||'');
+            const reverseBtn = (currentUser.role==='sales' && o.totalCost>0) ? `<button class="btn-danger" onclick="reverseOrder('${o.id}')">冲销</button>` : '';
+            tbody.innerHTML+=`<tr><td>${time}</td><td>${o.orderNo}</td><td>${o.recName}</td><td>${o.productName}</td><td>${o.totalCost.toFixed(2)}</td><td>${trackingField}</td><td>${reverseBtn}</td></tr>`;
         });
     }
     window.updateTracking = async function(orderId, value) {
@@ -446,16 +431,33 @@
             const newBalance = (userDoc.data().balance||0)+orig.totalCost;
             t.update(userRef, {balance: newBalance});
             t.set(db.collection('orders').doc(), reversal);
-            t.set(db.collection('transactions').doc(),{
-                userId: currentUser.id, username: currentUser.username, amount: orig.totalCost,
-                balanceAfter: newBalance, type:'reversal', remark:`冲销订单 ${orig.orderNo}`, timestamp: firebase.firestore.FieldValue.serverTimestamp()
-            });
+            t.set(db.collection('transactions').doc(),{userId: currentUser.id, username: currentUser.username, amount: orig.totalCost, balanceAfter: newBalance, type:'reversal', remark:`冲销订单 ${orig.orderNo}`, timestamp: firebase.firestore.FieldValue.serverTimestamp()});
         });
         currentUser.balance += orig.totalCost;
-        loadMyBalance(); renderOrders(); alert('冲销成功');
+        loadMyBalance(); alert('冲销成功');
     };
 
-    // ==================== 导出 ====================
+    // 销售商选择下拉框
+    async function loadSalesSelect() {
+        const sel = document.getElementById('salesSelect');
+        sel.innerHTML = '<option value="all">全部销售商</option>';
+        const snap = await db.collection('users').where('role','==','sales').get();
+        snap.forEach(d => {
+            const u = d.data();
+            sel.innerHTML += `<option value="${d.id}">${u.username}</option>`;
+        });
+        sel.addEventListener('change', ()=>{
+            // 触发重新渲染（onSnapshot 数据不变，但我们可以重新调用过滤）
+            // 简单起见，直接重新获取当前快照并过滤
+            if(ordersUnsubscribe) {
+                // 暂时取消监听再重新监听，以便应用新的过滤条件
+                ordersUnsubscribe();
+                startOrdersRealtime();
+            }
+        });
+    }
+
+    // ==================== 导出功能 ====================
     function orderToExcelRow(o) {
         return [
             o.timestamp?new Date(o.timestamp.toDate()).toLocaleString():'', o.source||'', o.trackingNumber||'', o.recName||'', o.recAddress||'',
@@ -467,27 +469,31 @@
             o.remark||'', o.exported?'是':'否'
         ];
     }
-    async function getOrdersInRange(start,end,usernameFilter=null) {
+
+    async function getOrdersInRange(startISO, endISO, usernameFilter=null) {
         await ensureAuth();
         let q = db.collection('orders').orderBy('timestamp');
-        if(start) q = q.where('timestamp','>=',new Date(start));
-        if(end) q = q.where('timestamp','<=',new Date(end+'T23:59:59'));
+        if(startISO) q = q.where('timestamp','>=',new Date(startISO));
+        if(endISO) q = q.where('timestamp','<=',new Date(endISO));
         const snap = await q.get();
         let orders = snap.docs.map(d=>({id:d.id,...d.data()}));
         if(usernameFilter) orders = orders.filter(o=>o.username===usernameFilter);
         return orders;
     }
 
-    document.getElementById('exportMyOrdersBtn').addEventListener('click', async ()=>{
-        const orders = await getOrdersInRange(document.getElementById('orderStartDate').value, document.getElementById('orderEndDate').value, currentUser.username);
+    // 销售商导出
+    document.getElementById('exportMyOrdersBtn')?.addEventListener('click', async ()=>{
+        const start = document.getElementById('orderStartDate')?.value, end = document.getElementById('orderEndDate')?.value;
+        const orders = await getOrdersInRange(start, end, currentUser.username);
         const data = orders.map(orderToExcelRow);
-        downloadXlsxWithHeader(data, `我的订单_${new Date().toISOString().slice(0,10)}`);
+        downloadXlsxWithHeader(data, `我的订单_${new Date().toISOString().slice(0,16)}`);
     });
 
+    // 管理员分销售商导出
     document.getElementById('exportAllBtn').addEventListener('click', async ()=>{
         const start = document.getElementById('adminStartDate').value, end = document.getElementById('adminEndDate').value;
         const only = document.getElementById('exportUnexportedOnly').checked;
-        const orders = await getOrdersInRange(start,end);
+        const orders = await getOrdersInRange(start, end);
         const filtered = only ? orders.filter(o=>!o.exported) : orders;
         if(!filtered.length){alert('无订单');return;}
         const groups={}; filtered.forEach(o=>{ groups[o.username]=groups[o.username]||[]; groups[o.username].push(o); });
@@ -502,10 +508,11 @@
     });
 
     document.getElementById('exportSummaryBtn').addEventListener('click', async ()=>{
-        const orders = await getOrdersInRange(document.getElementById('adminStartDate').value, document.getElementById('adminEndDate').value);
+        const start = document.getElementById('adminStartDate').value, end = document.getElementById('adminEndDate').value;
+        const orders = await getOrdersInRange(start, end);
         const skuMap={}; orders.forEach(o=>o.items.forEach(i=>{ skuMap[i.sku]=(skuMap[i.sku]||0)+i.quantity; }));
         const data = Object.entries(skuMap).map(([sku,qty])=>({SKU:sku,'需求数量':qty}));
-        downloadXlsx(data, `商品需求汇总_${new Date().toISOString().slice(0,10)}`);
+        downloadXlsx(data, `商品需求汇总_${new Date().toISOString().slice(0,16)}`);
     });
 
     function downloadXlsx(data, filename) {
@@ -515,14 +522,14 @@
         const ws = XLSX.utils.aoa_to_sheet([TEMPLATE_HEADERS,...data]); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Sheet1'); XLSX.writeFile(wb, filename+'.xlsx');
     }
 
-    // ==================== 统计 ====================
+    // ==================== 统计（精确到分钟） ====================
     document.getElementById('loadStatsBtn').addEventListener('click', async ()=>{
         const start = document.getElementById('statsStartDate').value, end = document.getElementById('statsEndDate').value;
         if(!start||!end) return;
         await ensureAuth();
         const usersSnap = await db.collection('users').where('role','==','sales').get();
-        const ordersSnap = await db.collection('orders').where('timestamp','>=',new Date(start)).where('timestamp','<=',new Date(end+'T23:59:59')).get();
-        const transSnap = await db.collection('transactions').where('timestamp','>=',new Date(start)).where('timestamp','<=',new Date(end+'T23:59:59')).get();
+        const ordersSnap = await db.collection('orders').where('timestamp','>=',new Date(start)).where('timestamp','<=',new Date(end)).get();
+        const transSnap = await db.collection('transactions').where('timestamp','>=',new Date(start)).where('timestamp','<=',new Date(end)).get();
         const users={};
         usersSnap.forEach(d=>{ const u=d.data(); users[d.id]={username:u.username,balance:u.balance||0,recharge:0,spend:0,qty:0}; });
         transSnap.forEach(d=>{ const t=d.data(); if(users[t.userId]){ if(t.amount>0) users[t.userId].recharge+=t.amount; else users[t.userId].spend+=-t.amount; } });
