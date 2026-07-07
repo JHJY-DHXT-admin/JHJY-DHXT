@@ -11,7 +11,7 @@
     <style>
         *{box-sizing:border-box;margin:0;padding:0}
         body{font-family:'Segoe UI',Roboto,system-ui,sans-serif;background:#f0f2f5;display:flex;justify-content:center;padding:16px;min-height:100vh}
-        .container{max-width:960px;width:100%}
+        .container{max-width:1100px;width:100%}
         .card{background:white;border-radius:12px;padding:20px;margin-bottom:20px;box-shadow:0 2px 8px rgba(0,0,0,0.08)}
         h2{margin-bottom:16px;color:#1a1a1a}
         label{display:block;margin-bottom:6px;font-weight:500;color:#333}
@@ -21,6 +21,7 @@
         button:disabled{background:#a0c4ff;cursor:not-allowed}
         .btn-danger{background:#ff4d4f}.btn-danger:hover{background:#ff7875}
         .btn-success{background:#52c41a}.btn-success:hover{background:#73d13d}
+        .btn-warning{background:#fa8c16}.btn-warning:hover{background:#ffa940}
         .login-box{max-width:400px;margin:40px auto}
         .error{color:#ff4d4f;margin-top:8px;font-size:14px}
         table{width:100%;border-collapse:collapse;margin-top:10px;font-size:14px;word-break:break-word}
@@ -33,6 +34,8 @@
         .hidden{display:none}
         .tab-content{margin-top:16px}
         .brand{font-size:20px;font-weight:bold;color:#1677ff;margin-right:20px}
+        .highlight{background:#fff7e6;font-weight:bold}
+        .highlight td{background:#fff7e6}
     </style>
 </head>
 <body>
@@ -53,30 +56,20 @@
             <span style="float:right"><button id="logoutBtn" class="btn-danger">退出</button></span>
             <div style="margin-top:12px">
                 <span class="nav-link" data-tab="tab-orders">📦 订单管理</span>
-                <span class="nav-link" data-tab="tab-recharge">💰 充值</span>
+                <span class="nav-link" data-tab="tab-finance">💰 资金流水</span>
                 <span class="nav-link" data-tab="tab-products" id="navAdminProducts" style="display:none">🛒 商品管理</span>
                 <span class="nav-link" data-tab="tab-users" id="navAdminUsers" style="display:none">👥 用户管理</span>
-                <span class="nav-link" data-tab="tab-settings" id="navAdminSettings" style="display:none">⚙️ 设置</span>
+                <span class="nav-link" data-tab="tab-settings" id="navAdminSettings" style="display:none">⚙️ 设置与统计</span>
             </div>
         </div>
 
-        <!-- 订单Tab -->
         <div id="tab-orders" class="tab-content">
             <div class="card" id="orderFormCard">
                 <h2>📝 新建发货申请</h2>
-                <div class="row-flex">
-                    <div><label>收件人姓名</label><input id="recName"></div>
-                    <div><label>收件人电话</label><input id="recPhone"></div>
-                </div>
+                <div class="row-flex"><div><label>收件人姓名</label><input id="recName"></div><div><label>收件人电话</label><input id="recPhone"></div></div>
                 <label>收件地址</label><input id="recAddress">
-                <div class="row-flex">
-                    <div><label>邮编</label><input id="recZip"></div>
-                    <div><label>目的地</label><input id="recDest" value="TYO"></div>
-                </div>
-                <div class="row-flex">
-                    <div><label>订单号（可选）</label><input id="orderNo" placeholder="留空自动生成"></div>
-                    <div><label>店铺名称</label><input id="shopName"></div>
-                </div>
+                <div class="row-flex"><div><label>邮编</label><input id="recZip"></div><div><label>目的地</label><input id="recDest" value="TYO"></div></div>
+                <div class="row-flex"><div><label>订单号（可选）</label><input id="orderNo" placeholder="留空自动生成"></div><div><label>店铺名称</label><input id="shopName"></div></div>
                 <label>品名</label><input id="productName">
                 <label>描述（材质）</label><input id="material">
                 <label>总发货箱数</label><input id="totalBoxes" type="number" value="1">
@@ -89,52 +82,37 @@
 
                 <hr style="margin:20px 0">
                 <h3>📥 批量导入订单</h3>
-                <p style="font-size:13px;color:#666">请严格按照以下列顺序准备Excel（首行为标题）：<br>
-                填表日期、来源、物流单号、收件人姓名、收件人地址、收件邮编、收件电话、发货箱数、目的地、订单号、店铺名称、品名、描述(材质）、商品数量、商品1SKU、产品1数量、商品2SKU、产品2数量、商品3SKU、产品3数量、商品4SKU、产品4数量、商品5SKU、产品5数量</p>
                 <button id="downloadTemplateBtn" class="btn-success" style="margin-bottom:8px">📋 下载导入模板</button>
-                <br>
                 <input type="file" id="batchOrderFile" accept=".xlsx, .xls">
-                <button id="batchImportBtn">📤 开始导入</button>
-                <div id="batchImportMsg" style="margin-top:8px;color:#1677ff"></div>
+                <button id="previewBatchBtn">🔍 预览</button>
+                <div id="batchPreview" style="margin-top:10px"></div>
             </div>
             <div class="card">
                 <div style="display:flex;justify-content:space-between;align-items:center">
                     <h2>📋 我的订单</h2>
                     <button id="exportMyOrdersBtn" class="btn-success">⬇️ 导出Excel</button>
                 </div>
-                <div class="row-flex">
-                    <div><label>开始日期</label><input type="date" id="orderStartDate"></div>
-                    <div><label>结束日期</label><input type="date" id="orderEndDate"></div>
-                </div>
+                <div class="row-flex"><div><label>开始日期</label><input type="date" id="orderStartDate"></div><div><label>结束日期</label><input type="date" id="orderEndDate"></div></div>
                 <div style="overflow-x:auto">
                     <table id="ordersTable"><thead><tr><th>时间</th><th>订单号</th><th>收件人</th><th>品名</th><th>总费用</th><th>操作</th></tr></thead><tbody></tbody></table>
                 </div>
             </div>
         </div>
 
-        <!-- 充值Tab -->
-        <div id="tab-recharge" class="tab-content hidden">
+        <div id="tab-finance" class="tab-content hidden">
             <div class="card">
-                <h2>💰 余额：<span id="myBalance">0.00</span> 元</h2>
-                <h3>申请充值</h3>
-                <input id="rechargeAmount" type="number" placeholder="金额（元）" min="1">
-                <button id="applyRechargeBtn">📤 提交申请</button>
-                <div id="rechargeMsg" style="margin-top:8px;color:#1677ff"></div>
-            </div>
-            <div class="card" id="rechargeAdminPanel" style="display:none">
-                <h3>📥 待审核充值</h3>
-                <div id="pendingRecharges"></div>
+                <h2>💰 当前余额：<span id="myBalance">0.00</span> 元</h2>
+                <h3>资金流水记录</h3>
+                <div style="overflow-x:auto">
+                    <table id="transactionTable"><thead><tr><th>时间</th><th>金额</th><th>类型</th><th>备注</th><th>变动后余额</th></tr></thead><tbody></tbody></table>
+                </div>
             </div>
         </div>
 
-        <!-- 商品管理Tab（管理员） -->
         <div id="tab-products" class="tab-content hidden">
             <div class="card">
                 <h2>📦 商品SKU管理</h2>
-                <div class="row-flex">
-                    <div><label>SKU</label><input id="newSku"></div>
-                    <div><label>单价（元）</label><input id="newPrice" type="number" step="0.01"></div>
-                </div>
+                <div class="row-flex"><div><label>SKU</label><input id="newSku"></div><div><label>单价（元）</label><input id="newPrice" type="number" step="0.01"></div></div>
                 <button id="addProductBtn">➕ 添加商品</button>
                 <br><br>
                 <label>📥 批量导入（Excel：A列SKU，B列单价，首行为标题）</label>
@@ -145,21 +123,15 @@
             </div>
         </div>
 
-        <!-- 用户管理Tab（管理员） -->
         <div id="tab-users" class="tab-content hidden">
             <div class="card">
                 <h2>👥 销售商管理</h2>
-                <div class="row-flex">
-                    <div><label>用户名</label><input id="newUsername"></div>
-                    <div><label>密码</label><input id="newPassword" type="text"></div>
-                    <div><label>初始余额</label><input id="newBalance" type="number" value="0"></div>
-                </div>
+                <div class="row-flex"><div><label>用户名</label><input id="newUsername"></div><div><label>密码</label><input id="newPassword" type="text"></div><div><label>初始余额</label><input id="newBalance" type="number" value="0"></div></div>
                 <button id="addUserBtn">➕ 添加销售商</button>
                 <table id="userTable" style="margin-top:12px"><thead><tr><th>用户名</th><th>密码</th><th>余额</th><th>角色</th><th>操作</th></tr></thead><tbody></tbody></table>
             </div>
         </div>
 
-        <!-- 设置Tab（管理员） -->
         <div id="tab-settings" class="tab-content hidden">
             <div class="card">
                 <h2>⚙️ 运费设置</h2>
@@ -170,10 +142,8 @@
             </div>
             <div class="card">
                 <h2>📊 管理导出</h2>
-                <div class="row-flex">
-                    <div><label>开始日期</label><input type="date" id="adminStartDate"></div>
-                    <div><label>结束日期</label><input type="date" id="adminEndDate"></div>
-                </div>
+                <div class="row-flex"><div><label>开始日期</label><input type="date" id="adminStartDate"></div><div><label>结束日期</label><input type="date" id="adminEndDate"></div></div>
+                <div style="margin-bottom:8px"><label><input type="checkbox" id="exportUnexportedOnly" checked> 仅导出未标记的订单</label></div>
                 <button id="exportAllBtn" class="btn-success">⬇️ 导出全部订单（分销售商）</button>
                 <button id="exportSummaryBtn" class="btn-success" style="margin-left:8px">📊 导出商品需求汇总</button>
                 <button id="exportExpressBtn" class="btn-success" style="margin-left:8px">📮 导出快递模板</button>
@@ -183,10 +153,15 @@
                 <button id="importExpressBtn">📥 同步快递单号</button>
                 <div id="importMsg" style="margin-top:8px;color:#1677ff"></div>
             </div>
+            <div class="card">
+                <h2>📈 营业统计</h2>
+                <div class="row-flex"><div><label>开始日期</label><input type="date" id="statsStartDate"></div><div><label>结束日期</label><input type="date" id="statsEndDate"></div></div>
+                <button id="loadStatsBtn">📊 查看统计</button>
+                <div id="statsResult" style="margin-top:12px"></div>
+            </div>
         </div>
     </div>
-
-<script>
+    <script>
     // ==================== 配置 ====================
     const firebaseConfig = {
         apiKey: "AIzaSyBurKJOCabtCMQol9OONrk_piEQ-qk07DA",
@@ -213,7 +188,7 @@
         return auth.signInAnonymously();
     }
 
-    // 登录
+    // ==================== 登录与导航 ====================
     document.getElementById('loginBtn').addEventListener('click', async () => {
         const username = document.getElementById('loginUsername').value.trim();
         const password = document.getElementById('loginPassword').value.trim();
@@ -226,7 +201,9 @@
             const userData = userDoc.data();
             currentUser = { id: userDoc.id, username: userData.username, role: userData.role, balance: userData.balance || 0 };
             showMain();
-        } catch (e) { document.getElementById('loginError').textContent = e.message; }
+        } catch (e) {
+            document.getElementById('loginError').textContent = e.message;
+        }
     });
 
     function showMain() {
@@ -237,7 +214,6 @@
             document.getElementById('navAdminProducts').style.display = 'inline';
             document.getElementById('navAdminUsers').style.display = 'inline';
             document.getElementById('navAdminSettings').style.display = 'inline';
-            document.getElementById('rechargeAdminPanel').style.display = 'block';
             document.getElementById('orderFormCard').style.display = 'none';
         } else {
             document.getElementById('orderFormCard').style.display = 'block';
@@ -263,7 +239,7 @@
         document.querySelectorAll('.tab-content').forEach(t => t.classList.add('hidden'));
         document.getElementById(tabId).classList.remove('hidden');
         if (tabId === 'tab-orders') renderOrders();
-        if (tabId === 'tab-recharge') { loadMyBalance(); if (currentUser.role === 'admin') loadPendingRecharges(); }
+        if (tabId === 'tab-finance') { loadMyBalance(); renderTransactions(); }
         if (tabId === 'tab-products') renderProductList();
         if (tabId === 'tab-users') renderUserList();
         if (tabId === 'tab-settings') loadShippingSettings();
@@ -378,6 +354,7 @@
         const doc = await db.collection('settings').doc('shipping').get();
         if (doc.exists) shippingRule = doc.data();
     }
+
     async function loadShippingSettings() {
         await ensureAuth();
         const doc = await db.collection('settings').doc('shipping').get();
@@ -387,6 +364,7 @@
             document.getElementById('shipHigh').value = doc.data().high;
         }
     }
+
     document.getElementById('saveShippingBtn').addEventListener('click', async () => {
         await ensureAuth();
         const threshold = parseInt(document.getElementById('shipThreshold').value);
@@ -397,7 +375,7 @@
         alert('运费规则已保存');
     });
 
-    // ==================== 用户管理 ====================
+    // ==================== 用户管理（余额操作） ====================
     async function renderUserList() {
         await ensureAuth();
         const tbody = document.querySelector('#userTable tbody');
@@ -407,7 +385,10 @@
             const u = doc.data();
             const row = tbody.insertRow();
             row.innerHTML = `<td>${u.username}</td><td>${u.password}</td><td>${u.balance || 0}</td><td>${u.role}</td>
-            <td><button class="btn-danger" data-deluser="${doc.id}">删除</button></td>`;
+            <td>
+                <button class="btn-danger" data-deluser="${doc.id}">删除</button>
+                ${u.role === 'sales' ? `<button class="btn-success add-balance" data-uid="${doc.id}" data-username="${u.username}">+加款</button><button class="btn-warning deduct-balance" data-uid="${doc.id}" data-username="${u.username}">-扣款</button>` : ''}
+            </td>`;
         });
         document.querySelectorAll('[data-deluser]').forEach(btn => {
             btn.addEventListener('click', async (e) => {
@@ -417,7 +398,44 @@
                 renderUserList();
             });
         });
+        document.querySelectorAll('.add-balance').forEach(btn => {
+            btn.addEventListener('click', () => showBalanceModal(btn.dataset.uid, btn.dataset.username, 'add'));
+        });
+        document.querySelectorAll('.deduct-balance').forEach(btn => {
+            btn.addEventListener('click', () => showBalanceModal(btn.dataset.uid, btn.dataset.username, 'deduct'));
+        });
     }
+
+    function showBalanceModal(uid, username, type) {
+        const amount = prompt(`请输入要${type === 'add' ? '增加' : '减少'}的金额（${username}）：`);
+        if (!amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) return;
+        const remark = prompt('备注（如：微信转账充值）：');
+        adjustBalance(uid, username, type === 'add' ? parseFloat(amount) : -parseFloat(amount), remark || '管理员操作');
+    }
+
+    async function adjustBalance(uid, username, delta, remark) {
+        await ensureAuth();
+        const userRef = db.collection('users').doc(uid);
+        await db.runTransaction(async (transaction) => {
+            const userDoc = await transaction.get(userRef);
+            const oldBalance = userDoc.data().balance || 0;
+            const newBalance = oldBalance + delta;
+            transaction.update(userRef, { balance: newBalance });
+            // 记录交易
+            transaction.set(db.collection('transactions').doc(), {
+                userId: uid,
+                username: username,
+                amount: delta,
+                balanceAfter: newBalance,
+                type: 'admin',
+                remark: remark,
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            });
+        });
+        renderUserList();
+        if (currentUser.id === uid) loadMyBalance();
+    }
+
     document.getElementById('addUserBtn').addEventListener('click', async () => {
         await ensureAuth();
         const username = document.getElementById('newUsername').value.trim();
@@ -432,7 +450,7 @@
         renderUserList();
     });
 
-    // ==================== 充值 ====================
+    // ==================== 资金流水 ====================
     async function loadMyBalance() {
         if (!currentUser) return;
         await ensureAuth();
@@ -442,58 +460,25 @@
             document.getElementById('myBalance').textContent = currentUser.balance.toFixed(2);
         }
     }
-    document.getElementById('applyRechargeBtn').addEventListener('click', async () => {
-        await ensureAuth();
-        const amount = parseFloat(document.getElementById('rechargeAmount').value);
-        if (isNaN(amount) || amount <= 0) { alert('请输入有效金额'); return; }
-        await db.collection('recharges').add({
-            username: currentUser.username,
-            userId: currentUser.id,
-            amount,
-            status: 'pending',
-            timestamp: firebase.firestore.FieldValue.serverTimestamp()
-        });
-        document.getElementById('rechargeAmount').value = '';
-        document.getElementById('rechargeMsg').textContent = '申请已提交，等待管理员审核';
-    });
 
-    async function loadPendingRecharges() {
+    async function renderTransactions() {
+        if (!currentUser) return;
         await ensureAuth();
-        const container = document.getElementById('pendingRecharges');
-        container.innerHTML = '';
-        const snap = await db.collection('recharges').where('status', '==', 'pending').orderBy('timestamp').get();
-        if (snap.empty) {
-            container.innerHTML = '<p style="color:#888">暂无待审核充值申请</p>';
-            return;
-        }
+        const tbody = document.querySelector('#transactionTable tbody');
+        tbody.innerHTML = '';
+        const snap = await db.collection('transactions')
+            .where('userId', '==', currentUser.id)
+            .orderBy('timestamp', 'desc')
+            .limit(200).get();
         snap.forEach(doc => {
-            const r = doc.data();
-            const div = document.createElement('div');
-            div.style.margin = '4px 0';
-            div.innerHTML = `${r.username} 申请 ${r.amount} 元 
-                <button class="btn-success" data-confirm="${doc.id}" data-uid="${r.userId}" data-amount="${r.amount}">确认</button>`;
-            container.appendChild(div);
-        });
-        document.querySelectorAll('[data-confirm]').forEach(btn => {
-            btn.addEventListener('click', async (e) => {
-                await ensureAuth();
-                const rechargeId = e.target.dataset.confirm;
-                const userId = e.target.dataset.uid;
-                const amount = parseFloat(e.target.dataset.amount);
-                await db.collection('recharges').doc(rechargeId).update({ status: 'confirmed' });
-                const userRef = db.collection('users').doc(userId);
-                await db.runTransaction(async (transaction) => {
-                    const userDoc = await transaction.get(userRef);
-                    const newBalance = (userDoc.data().balance || 0) + amount;
-                    transaction.update(userRef, { balance: newBalance });
-                });
-                loadPendingRecharges();
-                loadMyBalance();
-            });
+            const t = doc.data();
+            const row = tbody.insertRow();
+            const time = t.timestamp ? new Date(t.timestamp.toDate()).toLocaleString() : '';
+            row.innerHTML = `<td>${time}</td><td>${t.amount > 0 ? '+' : ''}${t.amount.toFixed(2)}</td><td>${t.type}</td><td>${t.remark || ''}</td><td>${t.balanceAfter.toFixed(2)}</td>`;
+            if (t.type === 'admin') row.classList.add('highlight');
         });
     }
-
-    // ==================== 订单核心逻辑 ====================
+            // ==================== 订单提交核心 ====================
     async function submitSingleOrder(orderData) {
         if (currentUser.balance < orderData.totalCost) {
             return { success: false, error: '余额不足' };
@@ -502,16 +487,28 @@
         try {
             await db.runTransaction(async (transaction) => {
                 const userDoc = await transaction.get(userRef);
-                const currentBalance = userDoc.data().balance || 0;
-                if (currentBalance < orderData.totalCost) throw new Error('余额不足');
-                transaction.update(userRef, { balance: currentBalance - orderData.totalCost });
+                const oldBalance = userDoc.data().balance || 0;
+                if (oldBalance < orderData.totalCost) throw new Error('余额不足');
+                const newBalance = oldBalance - orderData.totalCost;
+                transaction.update(userRef, { balance: newBalance });
                 transaction.set(db.collection('orders').doc(), {
                     ...orderData,
                     username: currentUser.username,
                     userId: currentUser.id,
+                    exported: false,
                     timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-                    balanceBefore: currentBalance,
-                    balanceAfter: currentBalance - orderData.totalCost
+                    balanceBefore: oldBalance,
+                    balanceAfter: newBalance
+                });
+                // 记录交易
+                transaction.set(db.collection('transactions').doc(), {
+                    userId: currentUser.id,
+                    username: currentUser.username,
+                    amount: -orderData.totalCost,
+                    balanceAfter: newBalance,
+                    type: 'order',
+                    remark: `订单 ${orderData.orderNo}`,
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
                 });
             });
             currentUser.balance -= orderData.totalCost;
@@ -521,7 +518,23 @@
         }
     }
 
-    // 从表单构建订单对象（手动提交）
+    // 手动提交
+    document.getElementById('submitOrderBtn').addEventListener('click', async () => {
+        if (currentUser.role !== 'sales') return;
+        await ensureAuth();
+        const orderData = await buildOrderFromForm();
+        if (!orderData) return;
+        const res = await submitSingleOrder(orderData);
+        if (res.success) {
+            document.getElementById('orderMsg').textContent = '提交成功';
+            clearOrderForm();
+            renderOrders();
+            loadMyBalance();
+        } else {
+            alert('提交失败: ' + (res.error || '未知错误'));
+        }
+    });
+
     async function buildOrderFromForm() {
         const recName = document.getElementById('recName').value.trim();
         const recPhone = document.getElementById('recPhone').value.trim();
@@ -561,9 +574,74 @@
         };
     }
 
-    // 从批量导入行构建订单对象（列索引严格按模板）
+    function generateOrderNo() {
+        return 'ORD' + Date.now() + Math.random().toString(36).substr(2, 5).toUpperCase();
+    }
+
+    function clearOrderForm() {
+        ['recName','recPhone','recAddress','recZip','recDest','orderNo','shopName','productName','material','remark'].forEach(id => document.getElementById(id).value = '');
+        document.getElementById('totalBoxes').value = '1';
+        document.querySelectorAll('.sku-qty').forEach(inp => inp.value = '0');
+        document.querySelectorAll('.sku-input').forEach(inp => inp.value = '');
+        updateFeePreview();
+    }
+
+    // ==================== 批量导入预览与提交 ====================
+    document.getElementById('previewBatchBtn').addEventListener('click', async () => {
+        if (currentUser.role !== 'sales') return;
+        const file = document.getElementById('batchOrderFile').files[0];
+        if (!file) { alert('请选择Excel文件'); return; }
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            const data = new Uint8Array(e.target.result);
+            const wb = XLSX.read(data, { type: 'array' });
+            const ws = wb.Sheets[wb.SheetNames[0]];
+            const rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
+            if (rows.length < 2) { alert('文件无数据'); return; }
+
+            let html = '<table><tr><th>收件人</th><th>品名</th><th>SKU数量</th><th>运费</th><th>总费用</th><th>状态</th></tr>';
+            let previewOrders = [];
+            for (let i = 1; i < rows.length; i++) {
+                const orderData = buildOrderFromRow(rows[i]);
+                if (!orderData.recName || orderData.items.length === 0) continue;
+                const valid = currentUser.balance >= orderData.totalCost;
+                previewOrders.push({ orderData, valid });
+                html += `<tr>
+                    <td>${orderData.recName}</td>
+                    <td>${orderData.productName}</td>
+                    <td>${orderData.items.reduce((s,i)=>s+i.quantity,0)}</td>
+                    <td>${orderData.shippingFee}</td>
+                    <td>${orderData.totalCost.toFixed(2)}</td>
+                    <td style="color:${valid?'green':'red'}">${valid?'可提交':'余额不足'}</td>
+                </tr>`;
+            }
+            const totalOrders = previewOrders.length;
+            const validOrders = previewOrders.filter(p => p.valid);
+            const totalFee = validOrders.reduce((s,p) => s + p.orderData.shippingFee, 0);
+            const totalAmount = validOrders.reduce((s,p) => s + p.orderData.totalCost, 0);
+            html += '</table>';
+            html += `<p>总计：${totalOrders} 条，可提交 ${validOrders.length} 条 | 总运费：${totalFee} 元 | 总金额：${totalAmount} 元</p>`;
+            html += '<button id="confirmBatchBtn" class="btn-success">✅ 确认导入</button>';
+            document.getElementById('batchPreview').innerHTML = html;
+
+            document.getElementById('confirmBatchBtn').addEventListener('click', async () => {
+                let success = 0, fail = 0;
+                for (const p of previewOrders) {
+                    if (!p.valid) { fail++; continue; }
+                    const res = await submitSingleOrder(p.orderData);
+                    if (res.success) success++;
+                    else fail++;
+                }
+                document.getElementById('batchPreview').innerHTML = `导入完成：成功 ${success} 条，失败 ${fail} 条 | 总运费：${totalFee} 元 | 总金额：${totalAmount} 元`;
+                renderOrders();
+                loadMyBalance();
+            });
+        };
+        reader.readAsArrayBuffer(file);
+    });
+
+    // 从批量导入行构建订单（列索引严格按模板）
     function buildOrderFromRow(row) {
-        // 列顺序：0填表日期,1来源,2物流单号,3收件人姓名,4收件人地址,5收件邮编,6收件电话,7发货箱数,8目的地,9订单号,10店铺名称,11品名,12描述(材质),13商品数量,14商品1SKU,15产品1数量,16商品2SKU,17产品2数量,18商品3SKU,19产品3数量,20商品4SKU,21产品4数量,22商品5SKU,23产品5数量
         const items = [];
         let totalItemCost = 0;
         for (let i = 0; i < 5; i++) {
@@ -578,93 +656,33 @@
             }
         }
         const calculatedQty = items.reduce((s, i) => s + i.quantity, 0);
-        // 商品数量列：如果有值且为数字则使用，否则使用计算值
         const manualQty = parseInt(row[13]);
         const totalQuantity = (!isNaN(manualQty) && manualQty > 0) ? manualQty : calculatedQty;
-        const shippingFee = calcShipping(calculatedQty); // 按实际SKU数量之和计算运费
+        const shippingFee = calcShipping(calculatedQty);
         const totalCost = totalItemCost + shippingFee;
         return {
-            fillDate: String(row[0] || '').trim(),
-            source: String(row[1] || '').trim(),
-            logisticsNo: String(row[2] || '').trim(),
             recName: String(row[3] || '').trim(),
+            recPhone: String(row[6] || '').trim(),
             recAddress: String(row[4] || '').trim(),
             recZip: String(row[5] || '').trim(),
-            recPhone: String(row[6] || '').trim(),
-            totalBoxes: parseInt(row[7]) || 1,
             recDest: String(row[8] || '').trim() || 'TYO',
             orderNo: String(row[9] || '').trim() || generateOrderNo(),
             shopName: String(row[10] || '').trim(),
             productName: String(row[11] || '').trim(),
             material: String(row[12] || '').trim(),
+            totalBoxes: parseInt(row[7]) || 1,
             totalQuantity,
             items,
             shippingFee,
             totalCost,
             remark: '',
-            trackingNumber: ''
+            trackingNumber: '',
+            fillDate: String(row[0] || '').trim(),
+            source: String(row[1] || '').trim(),
+            logisticsNo: String(row[2] || '').trim()
         };
     }
 
-    function generateOrderNo() {
-        return 'ORD' + Date.now() + Math.random().toString(36).substr(2, 5).toUpperCase();
-    }
-
-    function clearOrderForm() {
-        ['recName','recPhone','recAddress','recZip','recDest','orderNo','shopName','productName','material','remark'].forEach(id => document.getElementById(id).value = '');
-        document.getElementById('totalBoxes').value = '1';
-        document.querySelectorAll('.sku-qty').forEach(inp => inp.value = '0');
-        document.querySelectorAll('.sku-input').forEach(inp => inp.value = '');
-        updateFeePreview();
-    }
-
-    // 手动提交
-    document.getElementById('submitOrderBtn').addEventListener('click', async () => {
-        if (currentUser.role !== 'sales') return;
-        await ensureAuth();
-        const orderData = await buildOrderFromForm();
-        if (!orderData) return;
-        const res = await submitSingleOrder(orderData);
-        if (res.success) {
-            document.getElementById('orderMsg').textContent = '提交成功';
-            clearOrderForm();
-            renderOrders();
-            loadMyBalance();
-        } else {
-            alert('提交失败: ' + (res.error || '未知错误'));
-        }
-    });
-
-    // 批量导入
-    document.getElementById('batchImportBtn').addEventListener('click', async () => {
-        if (currentUser.role !== 'sales') return;
-        await ensureAuth();
-        const file = document.getElementById('batchOrderFile').files[0];
-        if (!file) { alert('请选择Excel文件'); return; }
-        const reader = new FileReader();
-        reader.onload = async (e) => {
-            const data = new Uint8Array(e.target.result);
-            const wb = XLSX.read(data, { type: 'array' });
-            const ws = wb.Sheets[wb.SheetNames[0]];
-            const rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
-            if (rows.length < 2) { alert('文件无数据'); return; }
-            let successCount = 0, failCount = 0;
-            document.getElementById('batchImportMsg').textContent = '正在导入...';
-            for (let i = 1; i < rows.length; i++) {
-                const orderData = buildOrderFromRow(rows[i]);
-                if (!orderData.recName || orderData.items.length === 0) continue;
-                const res = await submitSingleOrder(orderData);
-                if (res.success) successCount++;
-                else failCount++;
-            }
-            document.getElementById('batchImportMsg').textContent = `导入完成：成功 ${successCount} 条，失败 ${failCount} 条`;
-            renderOrders();
-            loadMyBalance();
-        };
-        reader.readAsArrayBuffer(file);
-    });
-
-    // 下载模板
     document.getElementById('downloadTemplateBtn').addEventListener('click', () => {
         const headers = ['填表日期', '来源', '物流单号', '收件人姓名', '收件人地址', '收件邮编', '收件电话', '发货箱数', '目的地', '订单号', '店铺名称', '品名', '描述(材质）', '商品数量', '商品1SKU', '产品1数量', '商品2SKU', '产品2数量', '商品3SKU', '产品3数量', '商品4SKU', '产品4数量', '商品5SKU', '产品5数量'];
         const ws = XLSX.utils.aoa_to_sheet([headers]);
@@ -759,9 +777,13 @@
     document.getElementById('exportAllBtn').addEventListener('click', async () => {
         const start = document.getElementById('adminStartDate').value;
         const end = document.getElementById('adminEndDate').value;
+        const onlyUnexported = document.getElementById('exportUnexportedOnly').checked;
         const orders = await getOrdersInRange(start, end);
+        const filtered = onlyUnexported ? orders.filter(o => !o.exported) : orders;
+        if (filtered.length === 0) { alert('没有符合条件的订单'); return; }
+
         const groups = {};
-        orders.forEach(o => { if(!groups[o.username]) groups[o.username] = []; groups[o.username].push(o); });
+        filtered.forEach(o => { if (!groups[o.username]) groups[o.username] = []; groups[o.username].push(o); });
         const wb = XLSX.utils.book_new();
         for (const [username, userOrders] of Object.entries(groups)) {
             const data = userOrders.map(o => ({
@@ -776,7 +798,14 @@
             }));
             XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), username);
         }
-        XLSX.writeFile(wb, `全部销售商订单_${start}_${end}.xlsx`);
+        XLSX.writeFile(wb, `分销售商订单_${start}_${end}.xlsx`);
+
+        // 标记为已导出
+        const batch = db.batch();
+        filtered.forEach(o => batch.update(db.collection('orders').doc(o.id), { exported: true }));
+        await batch.commit();
+        alert(`导出成功，共 ${filtered.length} 条订单已标记为已导出`);
+        renderOrders();
     });
 
     document.getElementById('exportSummaryBtn').addEventListener('click', async () => {
@@ -830,12 +859,83 @@
         XLSX.writeFile(wb, filename + '.xlsx');
     }
 
-    // 初始化管理员
+    // ==================== 统计板块 ====================
+    document.getElementById('loadStatsBtn').addEventListener('click', async () => {
+        const start = document.getElementById('statsStartDate').value;
+        const end = document.getElementById('statsEndDate').value;
+        if (!start || !end) { alert('请选择日期范围'); return; }
+        await ensureAuth();
+
+        const usersSnap = await db.collection('users').where('role', '==', 'sales').get();
+        const ordersSnap = await db.collection('orders')
+            .where('timestamp', '>=', new Date(start))
+            .where('timestamp', '<=', new Date(end + 'T23:59:59'))
+            .get();
+        const transSnap = await db.collection('transactions')
+            .where('timestamp', '>=', new Date(start))
+            .where('timestamp', '<=', new Date(end + 'T23:59:59'))
+            .get();
+
+        const users = {};
+        usersSnap.forEach(d => { const u = d.data(); users[d.id] = { username: u.username, balance: u.balance || 0, recharge: 0, spend: 0, qty: 0 }; });
+        transSnap.forEach(d => {
+            const t = d.data();
+            if (users[t.userId]) {
+                if (t.amount > 0) users[t.userId].recharge += t.amount;
+                else users[t.userId].spend += -t.amount;
+            }
+        });
+        ordersSnap.forEach(d => {
+            const o = d.data();
+            if (users[o.userId]) {
+                const itemQty = o.items.reduce((s,i)=>s+(i.quantity||0),0);
+                users[o.userId].qty += itemQty;
+            }
+        });
+
+        const statsArr = Object.values(users);
+        let html = '<h3>📊 销售商汇总</h3><table><tr><th>销售商</th><th>充值</th><th>消费</th><th>余额</th><th>订货数量</th></tr>';
+        let totalRecharge=0, totalSpend=0, totalBalance=0, totalQty=0;
+        statsArr.forEach(u => {
+            html += `<tr><td>${u.username}</td><td>${u.recharge.toFixed(2)}</td><td>${u.spend.toFixed(2)}</td><td>${u.balance.toFixed(2)}</td><td>${u.qty}</td></tr>`;
+            totalRecharge+=u.recharge; totalSpend+=u.spend; totalBalance+=u.balance; totalQty+=u.qty;
+        });
+        html += `<tr style="font-weight:bold"><td>合计</td><td>${totalRecharge.toFixed(2)}</td><td>${totalSpend.toFixed(2)}</td><td>${totalBalance.toFixed(2)}</td><td>${totalQty}</td></tr></table>`;
+        html += '<button id="exportStatsBtn" class="btn-success" style="margin-top:8px">导出此表</button>';
+
+        // 商品销量
+        const skuMap = {};
+        ordersSnap.forEach(d => {
+            d.data().items.forEach(i => { skuMap[i.sku] = (skuMap[i.sku]||0) + (i.quantity||0); });
+        });
+        const skuArr = Object.entries(skuMap).sort((a,b)=>b[1]-a[1]);
+        html += '<h3 style="margin-top:16px">📦 商品销量排行</h3><table><tr><th>SKU</th><th>销量</th></tr>';
+        skuArr.forEach(([s,q]) => html += `<tr><td>${s}</td><td>${q}</td></tr>`);
+        html += '</table><button id="exportSkuStatsBtn" class="btn-success" style="margin-top:8px">导出此表</button>';
+
+        document.getElementById('statsResult').innerHTML = html;
+        document.getElementById('exportStatsBtn').addEventListener('click', () => {
+            const data = statsArr.map(u => ({ '销售商': u.username, '充值': u.recharge, '消费': u.spend, '余额': u.balance, '订货数量': u.qty }));
+            data.push({ '销售商': '合计', '充值': totalRecharge, '消费': totalSpend, '余额': totalBalance, '订货数量': totalQty });
+            downloadXlsx(data, `销售商统计_${start}_${end}`);
+        });
+        document.getElementById('exportSkuStatsBtn').addEventListener('click', () => {
+            const data = skuArr.map(([sku,qty]) => ({ 'SKU': sku, '销量': qty }));
+            downloadXlsx(data, `商品销量_${start}_${end}`);
+        });
+    });
+
+    // ==================== 初始化管理员 ====================
     async function initAdminUser() {
         await ensureAuth();
         const q = await db.collection('users').where('username', '==', ADMIN_USER).get();
         if (q.empty) {
-            await db.collection('users').add({ username: ADMIN_USER, password: ADMIN_PASS, role: 'admin', balance: 0 });
+            await db.collection('users').add({
+                username: ADMIN_USER,
+                password: ADMIN_PASS,
+                role: 'admin',
+                balance: 0
+            });
         }
     }
     initAdminUser();
