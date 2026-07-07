@@ -63,6 +63,7 @@
             </div>
         </div>
 
+        <!-- 订单Tab -->
         <div id="tab-orders" class="tab-content">
             <div class="card" id="orderFormCard">
                 <h2>📝 新建发货申请</h2>
@@ -82,7 +83,8 @@
 
                 <hr style="margin:20px 0">
                 <h3>📥 批量导入订单</h3>
-                <button id="downloadTemplateBtn" class="btn-success" style="margin-bottom:8px">📋 下载导入模板</button>
+                <p style="font-size:13px;color:#666">请使用统一模板（32列），前24列需填写，后8列系统自动计算。点击下载模板。</p>
+                <button id="downloadTemplateBtn" class="btn-success" style="margin-bottom:8px">📋 下载导入模板（32列）</button>
                 <input type="file" id="batchOrderFile" accept=".xlsx, .xls">
                 <button id="previewBatchBtn">🔍 预览</button>
                 <div id="batchPreview" style="margin-top:10px"></div>
@@ -90,15 +92,20 @@
             <div class="card">
                 <div style="display:flex;justify-content:space-between;align-items:center">
                     <h2>📋 我的订单</h2>
-                    <button id="exportMyOrdersBtn" class="btn-success">⬇️ 导出Excel</button>
+                    <button id="exportMyOrdersBtn" class="btn-success">⬇️ 导出Excel（32列模板）</button>
                 </div>
-                <div class="row-flex"><div><label>开始日期</label><input type="date" id="orderStartDate"></div><div><label>结束日期</label><input type="date" id="orderEndDate"></div></div>
+                <div class="row-flex">
+                    <div><label>开始日期</label><input type="date" id="orderStartDate"></div>
+                    <div><label>结束日期</label><input type="date" id="orderEndDate"></div>
+                    <div style="display:flex;align-items:flex-end"><button id="filterOrdersBtn">🔍 查询</button></div>
+                </div>
                 <div style="overflow-x:auto">
-                    <table id="ordersTable"><thead><tr><th>时间</th><th>订单号</th><th>收件人</th><th>品名</th><th>总费用</th><th>操作</th></tr></thead><tbody></tbody></table>
+                    <table id="ordersTable"><thead><tr><th>时间</th><th>订单号</th><th>收件人</th><th>品名</th><th>总费用</th><th>快递单号</th><th>操作</th></tr></thead><tbody></tbody></table>
                 </div>
             </div>
         </div>
 
+        <!-- 资金流水Tab -->
         <div id="tab-finance" class="tab-content hidden">
             <div class="card">
                 <h2>💰 当前余额：<span id="myBalance">0.00</span> 元</h2>
@@ -109,6 +116,7 @@
             </div>
         </div>
 
+        <!-- 商品管理Tab（管理员） -->
         <div id="tab-products" class="tab-content hidden">
             <div class="card">
                 <h2>📦 商品SKU管理</h2>
@@ -123,6 +131,7 @@
             </div>
         </div>
 
+        <!-- 用户管理Tab（管理员） -->
         <div id="tab-users" class="tab-content hidden">
             <div class="card">
                 <h2>👥 销售商管理</h2>
@@ -132,6 +141,7 @@
             </div>
         </div>
 
+        <!-- 设置与统计Tab（管理员） -->
         <div id="tab-settings" class="tab-content hidden">
             <div class="card">
                 <h2>⚙️ 运费设置</h2>
@@ -144,11 +154,11 @@
                 <h2>📊 管理导出</h2>
                 <div class="row-flex"><div><label>开始日期</label><input type="date" id="adminStartDate"></div><div><label>结束日期</label><input type="date" id="adminEndDate"></div></div>
                 <div style="margin-bottom:8px"><label><input type="checkbox" id="exportUnexportedOnly" checked> 仅导出未标记的订单</label></div>
-                <button id="exportAllBtn" class="btn-success">⬇️ 导出全部订单（分销售商）</button>
+                <button id="exportAllBtn" class="btn-success">⬇️ 导出全部订单（分销售商，32列模板）</button>
                 <button id="exportSummaryBtn" class="btn-success" style="margin-left:8px">📊 导出商品需求汇总</button>
-                <button id="exportExpressBtn" class="btn-success" style="margin-left:8px">📮 导出快递模板</button>
+                <button id="exportExpressBtn" class="btn-success" style="margin-left:8px">📮 导出快递模板（可填写后导入）</button>
                 <br><br>
-                <label>📤 导入已填快递单号的Excel</label>
+                <label>📤 导入已填快递单号的Excel（请使用导出的快递模板，第3列物流单号）</label>
                 <input type="file" id="expressFile" accept=".xlsx, .xls">
                 <button id="importExpressBtn">📥 同步快递单号</button>
                 <div id="importMsg" style="margin-top:8px;color:#1677ff"></div>
@@ -182,6 +192,14 @@
     let currentUser = null;
     let allProducts = [];
     let shippingRule = { threshold: 4, low: 18, high: 35 };
+    // 统一模板列定义（32列）
+    const TEMPLATE_HEADERS = [
+        '填表日期','来源','物流单号','收件人姓名','收件人地址','收件邮编','收件电话',
+        '发货箱数','目的地','订单号','店铺名称','品名','描述(材质）','商品数量',
+        '商品1SKU','产品1数量','商品2SKU','产品2数量','商品3SKU','产品3数量',
+        '商品4SKU','产品4数量','商品5SKU','产品5数量',
+        '商品费用','运费','总费用','申请时余额','扣减后余额','余额变动','备注','是否已导出'
+    ];
 
     async function ensureAuth() {
         if (auth.currentUser) return auth.currentUser;
@@ -470,11 +488,19 @@
             .where('userId', '==', currentUser.id)
             .orderBy('timestamp', 'desc')
             .limit(200).get();
+        if (snap.empty) {
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#888">暂无资金流水记录</td></tr>';
+            return;
+        }
         snap.forEach(doc => {
             const t = doc.data();
             const row = tbody.insertRow();
             const time = t.timestamp ? new Date(t.timestamp.toDate()).toLocaleString() : '';
-            row.innerHTML = `<td>${time}</td><td>${t.amount > 0 ? '+' : ''}${t.amount.toFixed(2)}</td><td>${t.type}</td><td>${t.remark || ''}</td><td>${t.balanceAfter.toFixed(2)}</td>`;
+            let typeText = t.type;
+            if (t.type === 'admin') typeText = '管理员操作';
+            else if (t.type === 'order') typeText = '订单扣款';
+            else if (t.type === 'reversal') typeText = '冲销退款';
+            row.innerHTML = `<td>${time}</td><td>${t.amount > 0 ? '+' : ''}${t.amount.toFixed(2)}</td><td>${typeText}</td><td>${t.remark || ''}</td><td>${t.balanceAfter.toFixed(2)}</td>`;
             if (t.type === 'admin') row.classList.add('highlight');
         });
     }
@@ -599,7 +625,7 @@
             const rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
             if (rows.length < 2) { alert('文件无数据'); return; }
 
-            let html = '<table><tr><th>收件人</th><th>品名</th><th>SKU数量</th><th>运费</th><th>总费用</th><th>状态</th></tr>';
+            let html = '<table><tr><th>收件人</th><th>品名</th><th>商品数量</th><th>运费</th><th>总费用</th><th>状态</th></tr>';
             let previewOrders = [];
             for (let i = 1; i < rows.length; i++) {
                 const orderData = buildOrderFromRow(rows[i]);
@@ -609,7 +635,7 @@
                 html += `<tr>
                     <td>${orderData.recName}</td>
                     <td>${orderData.productName}</td>
-                    <td>${orderData.items.reduce((s,i)=>s+i.quantity,0)}</td>
+                    <td>${orderData.totalQuantity}</td>
                     <td>${orderData.shippingFee}</td>
                     <td>${orderData.totalCost.toFixed(2)}</td>
                     <td style="color:${valid?'green':'red'}">${valid?'可提交':'余额不足'}</td>
@@ -640,7 +666,7 @@
         reader.readAsArrayBuffer(file);
     });
 
-    // 从批量导入行构建订单（列索引严格按模板）
+    // 从批量导入行构建订单（列索引按32列模板，但只用到前24列）
     function buildOrderFromRow(row) {
         const items = [];
         let totalItemCost = 0;
@@ -676,28 +702,38 @@
             shippingFee,
             totalCost,
             remark: '',
-            trackingNumber: '',
+            trackingNumber: String(row[2] || '').trim(), // 物流单号
             fillDate: String(row[0] || '').trim(),
-            source: String(row[1] || '').trim(),
-            logisticsNo: String(row[2] || '').trim()
+            source: String(row[1] || '').trim()
         };
     }
 
+    // 下载32列模板
     document.getElementById('downloadTemplateBtn').addEventListener('click', () => {
-        const headers = ['填表日期', '来源', '物流单号', '收件人姓名', '收件人地址', '收件邮编', '收件电话', '发货箱数', '目的地', '订单号', '店铺名称', '品名', '描述(材质）', '商品数量', '商品1SKU', '产品1数量', '商品2SKU', '产品2数量', '商品3SKU', '产品3数量', '商品4SKU', '产品4数量', '商品5SKU', '产品5数量'];
-        const ws = XLSX.utils.aoa_to_sheet([headers]);
+        const ws = XLSX.utils.aoa_to_sheet([TEMPLATE_HEADERS]);
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, '模板');
-        XLSX.writeFile(wb, '金海嘉运批量导入模板.xlsx');
+        XLSX.writeFile(wb, '金海嘉运统一模板.xlsx');
     });
 
-    // ==================== 订单列表与冲销 ====================
+    // ==================== 订单列表（含日期筛选） ====================
+    document.getElementById('filterOrdersBtn').addEventListener('click', () => {
+        renderOrders();
+    });
+
     async function renderOrders() {
         await ensureAuth();
         const tbody = document.querySelector('#ordersTable tbody');
         tbody.innerHTML = '';
         let query = db.collection('orders').orderBy('timestamp', 'desc');
         if (currentUser.role === 'sales') query = query.where('userId', '==', currentUser.id);
+
+        // 日期筛选
+        const start = document.getElementById('orderStartDate').value;
+        const end = document.getElementById('orderEndDate').value;
+        if (start) query = query.where('timestamp', '>=', new Date(start));
+        if (end) query = query.where('timestamp', '<=', new Date(end + 'T23:59:59'));
+
         const snap = await query.limit(200).get();
         snap.forEach(doc => {
             const o = doc.data();
@@ -705,7 +741,8 @@
             row.innerHTML = `<td>${o.timestamp ? new Date(o.timestamp.toDate()).toLocaleString() : ''}</td>
             <td>${o.orderNo}</td><td>${o.recName}</td><td>${o.productName}</td>
             <td>${o.totalCost.toFixed(2)}</td>
-            <td>${o.trackingNumber || ''} ${currentUser.role === 'sales' && o.totalCost > 0 ? `<button class="btn-danger reverse-btn" data-orderid="${doc.id}">冲销</button>` : ''}</td>`;
+            <td>${o.trackingNumber || ''}</td>
+            <td>${currentUser.role === 'sales' && o.totalCost > 0 ? `<button class="btn-danger reverse-btn" data-orderid="${doc.id}">冲销</button>` : ''}</td>`;
         });
         document.querySelectorAll('.reverse-btn').forEach(btn => {
             btn.addEventListener('click', async (e) => {
@@ -728,7 +765,8 @@
                     timestamp: firebase.firestore.FieldValue.serverTimestamp(),
                     balanceBefore: currentUser.balance,
                     balanceAfter: currentUser.balance + original.totalCost,
-                    trackingNumber: ''
+                    trackingNumber: '',
+                    exported: false
                 };
                 const userRef = db.collection('users').doc(currentUser.id);
                 await db.runTransaction(async (transaction) => {
@@ -736,6 +774,16 @@
                     const newBalance = (userDoc.data().balance || 0) + original.totalCost;
                     transaction.update(userRef, { balance: newBalance });
                     transaction.set(db.collection('orders').doc(), reversal);
+                    // 记录冲销交易
+                    transaction.set(db.collection('transactions').doc(), {
+                        userId: currentUser.id,
+                        username: currentUser.username,
+                        amount: original.totalCost,
+                        balanceAfter: newBalance,
+                        type: 'reversal',
+                        remark: `冲销订单 ${original.orderNo}`,
+                        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                    });
                 });
                 currentUser.balance += original.totalCost;
                 loadMyBalance();
@@ -745,7 +793,39 @@
         });
     }
 
-    // ==================== 导出功能 ====================
+    // ==================== 导出功能（全部32列模板） ====================
+    function orderToExcelRow(o) {
+        return [
+            o.timestamp ? new Date(o.timestamp.toDate()).toLocaleString() : '', // 填表日期
+            o.source || '', // 来源
+            o.trackingNumber || '', // 物流单号
+            o.recName || '', // 收件人姓名
+            o.recAddress || '', // 收件人地址
+            o.recZip || '', // 收件邮编
+            o.recPhone || '', // 收件电话
+            o.totalBoxes || 1, // 发货箱数
+            o.recDest || 'TYO', // 目的地
+            o.orderNo || '', // 订单号
+            o.shopName || '', // 店铺名称
+            o.productName || '', // 品名
+            o.material || '', // 描述(材质）
+            o.totalQuantity || 0, // 商品数量
+            o.items[0]?.sku || '', o.items[0]?.quantity || 0,
+            o.items[1]?.sku || '', o.items[1]?.quantity || 0,
+            o.items[2]?.sku || '', o.items[2]?.quantity || 0,
+            o.items[3]?.sku || '', o.items[3]?.quantity || 0,
+            o.items[4]?.sku || '', o.items[4]?.quantity || 0,
+            o.items.reduce((s,i)=>s+i.cost,0).toFixed(2), // 商品费用
+            o.shippingFee || 0, // 运费
+            o.totalCost.toFixed(2), // 总费用
+            o.balanceBefore?.toFixed(2) || '', // 申请时余额
+            o.balanceAfter?.toFixed(2) || '', // 扣减后余额
+            ((o.balanceAfter||0) - (o.balanceBefore||0)).toFixed(2), // 余额变动
+            o.remark || '', // 备注
+            o.exported ? '是' : '否' // 是否已导出
+        ];
+    }
+
     async function getOrdersInRange(start, end, usernameFilter = null) {
         await ensureAuth();
         let query = db.collection('orders').orderBy('timestamp');
@@ -761,17 +841,8 @@
         const start = document.getElementById('orderStartDate').value;
         const end = document.getElementById('orderEndDate').value;
         const orders = await getOrdersInRange(start, end, currentUser.username);
-        const data = orders.map(o => ({
-            '时间': o.timestamp ? new Date(o.timestamp.toDate()).toLocaleString() : '',
-            '订单号': o.orderNo, '收件人': o.recName, '电话': o.recPhone, '地址': o.recAddress,
-            '品名': o.productName, '材质': o.material, '总箱数': o.totalBoxes, '商品数量': o.totalQuantity || 0,
-            'SKU明细': o.items.map(i => `${i.sku}x${i.quantity}`).join('; '),
-            '商品费用': o.items.reduce((s,i)=>s+i.cost,0).toFixed(2),
-            '运费': o.shippingFee, '总费用': o.totalCost,
-            '申请时余额': o.balanceBefore, '扣减后余额': o.balanceAfter,
-            '快递单号': o.trackingNumber, '备注': o.remark
-        }));
-        downloadXlsx(data, `我的订单_${start}_${end}`);
+        const data = orders.map(orderToExcelRow);
+        downloadXlsxWithHeader(data, `我的订单_${start}_${end}`);
     });
 
     document.getElementById('exportAllBtn').addEventListener('click', async () => {
@@ -786,26 +857,16 @@
         filtered.forEach(o => { if (!groups[o.username]) groups[o.username] = []; groups[o.username].push(o); });
         const wb = XLSX.utils.book_new();
         for (const [username, userOrders] of Object.entries(groups)) {
-            const data = userOrders.map(o => ({
-                '时间': o.timestamp ? new Date(o.timestamp.toDate()).toLocaleString() : '',
-                '订单号': o.orderNo, '收件人': o.recName, '电话': o.recPhone, '地址': o.recAddress,
-                '品名': o.productName, '材质': o.material, '总箱数': o.totalBoxes, '商品数量': o.totalQuantity || 0,
-                'SKU明细': o.items.map(i => `${i.sku}x${i.quantity}`).join('; '),
-                '商品费用': o.items.reduce((s,i)=>s+i.cost,0).toFixed(2),
-                '运费': o.shippingFee, '总费用': o.totalCost,
-                '余额变动': `${o.balanceBefore} → ${o.balanceAfter}`,
-                '快递单号': o.trackingNumber, '备注': o.remark
-            }));
-            XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), username);
+            const data = userOrders.map(orderToExcelRow);
+            XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([TEMPLATE_HEADERS, ...data]), username);
         }
         XLSX.writeFile(wb, `分销售商订单_${start}_${end}.xlsx`);
 
-        // 标记为已导出
+        // 标记已导出
         const batch = db.batch();
         filtered.forEach(o => batch.update(db.collection('orders').doc(o.id), { exported: true }));
         await batch.commit();
         alert(`导出成功，共 ${filtered.length} 条订单已标记为已导出`);
-        renderOrders();
     });
 
     document.getElementById('exportSummaryBtn').addEventListener('click', async () => {
@@ -823,12 +884,17 @@
         const end = document.getElementById('adminEndDate').value;
         const orders = await getOrdersInRange(start, end);
         const data = orders.filter(o => o.totalCost > 0).map(o => ({
-            '订单号': o.orderNo, '收件人': o.recName, '地址': o.recAddress,
-            '商品': o.productName, '数量': o.totalBoxes, '快递单号': ''
+            '订单号': o.orderNo,
+            '收件人': o.recName,
+            '地址': o.recAddress,
+            '商品': o.productName,
+            '数量': o.totalBoxes,
+            '物流单号': o.trackingNumber || '' // 第3列
         }));
         downloadXlsx(data, `快递模板_${start}_${end}`);
     });
 
+    // 导入快递单号（修复：物流单号在第3列，索引2）
     document.getElementById('importExpressBtn').addEventListener('click', async () => {
         await ensureAuth();
         const file = document.getElementById('expressFile').files[0];
@@ -839,12 +905,17 @@
             const wb = XLSX.read(data, { type: 'array' });
             const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1 });
             if (rows.length < 2) { alert('文件无数据'); return; }
-            const batch = db.batch(); let count = 0;
+            const batch = db.batch();
+            let count = 0;
             for (let i = 1; i < rows.length; i++) {
-                const [orderNo, , , , trackingNo] = rows[i];
+                const orderNo = String(rows[i][0] || '').trim(); // 订单号第1列
+                const trackingNo = String(rows[i][5] || '').trim(); // 物流单号第6列？导出模板是6列：订单号、收件人、地址、商品、数量、物流单号 -> 物流单号索引5
                 if (!orderNo || !trackingNo) continue;
-                const q = await db.collection('orders').where('orderNo', '==', String(orderNo)).get();
-                q.forEach(doc => { batch.update(doc.ref, { trackingNumber: String(trackingNo) }); count++; });
+                const q = await db.collection('orders').where('orderNo', '==', orderNo).get();
+                q.forEach(doc => {
+                    batch.update(doc.ref, { trackingNumber: trackingNo });
+                    count++;
+                });
             }
             await batch.commit();
             document.getElementById('importMsg').textContent = `成功更新 ${count} 条快递单号`;
@@ -854,6 +925,13 @@
 
     function downloadXlsx(data, filename) {
         const ws = XLSX.utils.json_to_sheet(data);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+        XLSX.writeFile(wb, filename + '.xlsx');
+    }
+
+    function downloadXlsxWithHeader(data, filename) {
+        const ws = XLSX.utils.aoa_to_sheet([TEMPLATE_HEADERS, ...data]);
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
         XLSX.writeFile(wb, filename + '.xlsx');
@@ -903,7 +981,6 @@
         html += `<tr style="font-weight:bold"><td>合计</td><td>${totalRecharge.toFixed(2)}</td><td>${totalSpend.toFixed(2)}</td><td>${totalBalance.toFixed(2)}</td><td>${totalQty}</td></tr></table>`;
         html += '<button id="exportStatsBtn" class="btn-success" style="margin-top:8px">导出此表</button>';
 
-        // 商品销量
         const skuMap = {};
         ordersSnap.forEach(d => {
             d.data().items.forEach(i => { skuMap[i.sku] = (skuMap[i.sku]||0) + (i.quantity||0); });
