@@ -28,9 +28,7 @@
         th{background:#fafafa}
         .row-flex{display:flex;gap:12px;flex-wrap:wrap}
         .row-flex>*{flex:1;min-width:120px}
-        .nav-link{color:#1677ff;cursor:pointer;margin-right:20px;font-weight:500}
         .hidden{display:none}
-        .tab-content{margin-top:16px}
         .brand{font-size:20px;font-weight:bold;color:#1677ff}
         .msg{color:#1677ff;margin-top:8px;font-size:14px}
     </style>
@@ -44,86 +42,83 @@
         <div id="loginError" class="error"></div>
     </div>
 
-    <div id="mainPage" style="display:none" class="container">
+    <!-- 销售商界面 -->
+    <div id="salesPage" style="display:none" class="container">
         <div class="card">
             <span class="brand">🚚 金海嘉运 HR2.0</span>
-            <span id="welcomeUser" style="font-weight:bold"></span>
-            <span style="float:right"><button id="logoutBtn" class="btn-danger">退出</button></span>
-            <div style="margin-top:12px">
-                <span class="nav-link" data-tab="tab-sales">📦 销售商</span>
-                <span class="nav-link" data-tab="tab-admin" id="navAdmin" style="display:none">📊 管理面板</span>
-            </div>
+            <span id="salesWelcome" style="font-weight:bold"></span>
+            <span style="float:right"><button id="salesLogoutBtn" class="btn-danger">退出</button></span>
         </div>
-
-        <!-- 销售商Tab -->
-        <div id="tab-sales" class="tab-content">
-            <div class="card">
-                <h2>📤 上传订单文件</h2>
-                <p style="font-size:13px;color:#666">请上传标准32列Excel文件。系统自动计算费用并扣减余额。</p>
-                <input type="file" id="orderFile" accept=".xlsx, .xls">
-                <button id="uploadOrderBtn">📤 上传并提交</button>
-                <div id="uploadMsg" class="msg"></div>
-                <hr style="margin:16px 0">
-                <button id="downloadTemplateBtn" class="btn-success">📋 下载标准模板</button>
-            </div>
-            <div class="card">
-                <h2>📥 下载我的表格</h2>
-                <p style="font-size:13px;color:#666">下载管理员拆分给您的订单文件（含余额、费用明细）。</p>
-                <button id="downloadMyFileBtn" class="btn-success">⬇️ 下载我的表格</button>
-                <div id="downloadMsg" class="msg"></div>
-            </div>
+        <div class="card">
+            <h2>📤 上传订单文件</h2>
+            <p style="font-size:13px;color:#666">请上传标准32列Excel文件。系统自动计算费用并扣减余额。</p>
+            <input type="file" id="orderFile" accept=".xlsx, .xls">
+            <button id="uploadOrderBtn">📤 上传并提交</button>
+            <div id="uploadMsg" class="msg"></div>
+            <hr style="margin:16px 0">
+            <button id="downloadTemplateBtn" class="btn-success">📋 下载标准模板</button>
         </div>
+        <div class="card">
+            <h2>📥 下载我的表格</h2>
+            <p style="font-size:13px;color:#666">下载管理员拆分给您的订单文件（含余额、费用明细）。</p>
+            <button id="downloadMyFileBtn" class="btn-success">⬇️ 下载我的表格</button>
+            <div id="downloadMsg" class="msg"></div>
+        </div>
+    </div>
 
-        <!-- 管理面板Tab -->
-        <div id="tab-admin" class="tab-content hidden">
-            <div class="card">
-                <h2>👥 销售商管理</h2>
-                <div class="row-flex"><div><label>用户名</label><input id="newUsername"></div><div><label>密码</label><input id="newPassword"></div><div><label>初始余额</label><input id="newBalance" type="number" value="0"></div></div>
-                <button id="addUserBtn">➕ 添加销售商</button>
-                <table id="userTable" style="margin-top:12px"><thead><tr><th>用户名</th><th>密码</th><th>余额</th><th>操作</th></tr></thead><tbody></tbody></table>
+    <!-- 管理员界面 -->
+    <div id="adminPage" style="display:none" class="container">
+        <div class="card">
+            <span class="brand">🚚 金海嘉运 HR2.0</span>
+            <span id="adminWelcome" style="font-weight:bold"></span>
+            <span style="float:right"><button id="adminLogoutBtn" class="btn-danger">退出</button></span>
+        </div>
+        <div class="card">
+            <h2>👥 销售商管理</h2>
+            <div class="row-flex"><div><label>用户名</label><input id="newUsername"></div><div><label>密码</label><input id="newPassword"></div><div><label>初始余额</label><input id="newBalance" type="number" value="0"></div></div>
+            <button id="addUserBtn">➕ 添加销售商</button>
+            <table id="userTable" style="margin-top:12px"><thead><tr><th>用户名</th><th>密码</th><th>余额</th><th>操作</th></tr></thead><tbody></tbody></table>
+        </div>
+        <div class="card">
+            <h2>🛒 商品SKU管理</h2>
+            <div class="row-flex"><div><label>SKU</label><input id="newSku"></div><div><label>单价</label><input id="newPrice" type="number" step="0.01"></div></div>
+            <button id="addProductBtn">➕ 添加</button>
+            <table id="productTable" style="margin-top:12px"><thead><tr><th>SKU</th><th>单价</th><th>操作</th></tr></thead><tbody></tbody></table>
+        </div>
+        <div class="card">
+            <h2>⚙️ 运费设置</h2>
+            <div class="row-flex">
+                <div><label>阈值</label><input id="shipThreshold" type="number" value="4"></div>
+                <div><label>低价运费</label><input id="shipLow" type="number" value="18"></div>
+                <div><label>高价运费</label><input id="shipHigh" type="number" value="35"></div>
             </div>
-            <div class="card">
-                <h2>🛒 商品SKU管理</h2>
-                <div class="row-flex"><div><label>SKU</label><input id="newSku"></div><div><label>单价</label><input id="newPrice" type="number" step="0.01"></div></div>
-                <button id="addProductBtn">➕ 添加</button>
-                <table id="productTable" style="margin-top:12px"><thead><tr><th>SKU</th><th>单价</th><th>操作</th></tr></thead><tbody></tbody></table>
+            <button id="saveShippingBtn">💾 保存</button>
+        </div>
+        <div class="card">
+            <h2>📤 上传总表（自动拆分）</h2>
+            <p style="font-size:13px;color:#666">上传包含多个Sheet的Excel工作簿，Sheet名需与销售商用户名一致。</p>
+            <input type="file" id="masterFile" accept=".xlsx, .xls">
+            <button id="uploadMasterBtn">📤 上传并拆分</button>
+            <div id="masterMsg" class="msg"></div>
+        </div>
+        <div class="card">
+            <h2>📥 下载各销售商订单</h2>
+            <div class="row-flex">
+                <div><label>开始日期</label><input type="date" id="adminStartDate"></div>
+                <div><label>结束日期</label><input type="date" id="adminEndDate"></div>
             </div>
-            <div class="card">
-                <h2>⚙️ 运费设置</h2>
-                <div class="row-flex">
-                    <div><label>阈值</label><input id="shipThreshold" type="number" value="4"></div>
-                    <div><label>低价运费</label><input id="shipLow" type="number" value="18"></div>
-                    <div><label>高价运费</label><input id="shipHigh" type="number" value="35"></div>
-                </div>
-                <button id="saveShippingBtn">💾 保存</button>
-            </div>
-            <div class="card">
-                <h2>📤 上传总表（自动拆分）</h2>
-                <p style="font-size:13px;color:#666">上传包含多个Sheet的Excel工作簿，Sheet名需与销售商用户名一致。系统自动拆分并分发。</p>
-                <input type="file" id="masterFile" accept=".xlsx, .xls">
-                <button id="uploadMasterBtn">📤 上传并拆分</button>
-                <div id="masterMsg" class="msg"></div>
-            </div>
-            <div class="card">
-                <h2>📥 下载各销售商订单</h2>
-                <div class="row-flex">
-                    <div><label>开始日期</label><input type="date" id="adminStartDate"></div>
-                    <div><label>结束日期</label><input type="date" id="adminEndDate"></div>
-                </div>
-                <button id="downloadAllOrdersBtn" class="btn-success">⬇️ 下载全部订单（分Sheet）</button>
-            </div>
-            <div class="card">
-                <h2>📊 生成月度汇总表</h2>
-                <label>选择月份</label>
-                <input type="month" id="summaryMonth">
-                <button id="generateSummaryBtn" class="btn-success">📊 生成月度汇总</button>
-                <div id="summaryMsg" class="msg"></div>
-            </div>
+            <button id="downloadAllOrdersBtn" class="btn-success">⬇️ 下载全部订单（分Sheet）</button>
+        </div>
+        <div class="card">
+            <h2>📊 生成月度汇总表</h2>
+            <label>选择月份</label>
+            <input type="month" id="summaryMonth">
+            <button id="generateSummaryBtn" class="btn-success">📊 生成月度汇总</button>
+            <div id="summaryMsg" class="msg"></div>
         </div>
     </div>
 
 <script>
-    // ==================== 配置 ====================
     const firebaseConfig = {
         apiKey: "AIzaSyBurKJOCabtCMQol9OONrk_piEQ-qk07DA",
         authDomain: "jhjy-dhxt.firebaseapp.com",
@@ -136,10 +131,11 @@
     firebase.initializeApp(firebaseConfig);
     const auth = firebase.auth(), db = firebase.firestore();
     let currentUser = null, allProducts = [], shippingRule = { threshold: 4, low: 18, high: 35 };
+    const TEMPLATE_HEADERS = ['填表日期','来源','物流单号','收件人姓名','收件人地址','收件邮编','收件电话','发货箱数','目的地','订单号','店铺名称','品名','描述(材质）','商品数量','商品1SKU','产品1数量','商品2SKU','产品2数量','商品3SKU','产品3数量','商品4SKU','产品4数量','商品5SKU','产品5数量','商品费用','运费','总费用','申请时余额','扣减后余额','余额变动','备注','是否已导出'];
 
     async function ensureAuth() { if (auth.currentUser) return auth.currentUser; return auth.signInAnonymously(); }
 
-    // ==================== 登录与导航 ====================
+    // ==================== 登录 ====================
     document.getElementById('loginBtn').addEventListener('click', async () => {
         const u = document.getElementById('loginUsername').value.trim(), p = document.getElementById('loginPassword').value.trim();
         if(!u||!p) { document.getElementById('loginError').textContent='请输入用户名和密码'; return; }
@@ -149,30 +145,34 @@
             if(q.empty) throw new Error('用户名或密码错误');
             const d = q.docs[0].data();
             currentUser = { id: q.docs[0].id, username: d.username, role: d.role, balance: d.balance||0 };
-            showMain();
+            document.getElementById('loginPage').style.display = 'none';
+            if(currentUser.role === 'admin') showAdminPage();
+            else showSalesPage();
         } catch(e) { document.getElementById('loginError').textContent = e.message; }
     });
 
-    function showMain() {
-        document.getElementById('loginPage').style.display='none';
-        document.getElementById('mainPage').style.display='block';
-        document.getElementById('welcomeUser').textContent = `欢迎，${currentUser.username}（${currentUser.role==='admin'?'管理员':'销售商'}）`;
-        if(currentUser.role==='admin') {
-            document.getElementById('navAdmin').style.display='inline';
-            document.getElementById('tab-sales').classList.add('hidden');
-            switchTab('tab-admin');
-        } else {
-            switchTab('tab-sales');
-        }
+    function showAdminPage() {
+        document.getElementById('adminPage').style.display = 'block';
+        document.getElementById('adminWelcome').textContent = `欢迎，${currentUser.username}（管理员）`;
+        loadProducts(); loadShippingRule();
+        renderUserList(); renderProductList(); loadShippingSettings();
+    }
+
+    function showSalesPage() {
+        document.getElementById('salesPage').style.display = 'block';
+        document.getElementById('salesWelcome').textContent = `欢迎，${currentUser.username}`;
         loadProducts(); loadShippingRule();
     }
 
-    document.getElementById('logoutBtn').addEventListener('click', async () => { await auth.signOut(); currentUser=null; document.getElementById('mainPage').style.display='none'; document.getElementById('loginPage').style.display='block'; });
-    document.querySelectorAll('.nav-link').forEach(l=>l.addEventListener('click', ()=>switchTab(l.dataset.tab)));
-    function switchTab(tabId) {
-        document.querySelectorAll('.tab-content').forEach(t=>t.classList.add('hidden'));
-        document.getElementById(tabId).classList.remove('hidden');
-        if(tabId==='tab-admin') { renderUserList(); renderProductList(); loadShippingSettings(); }
+    // 退出
+    document.getElementById('salesLogoutBtn').addEventListener('click', logout);
+    document.getElementById('adminLogoutBtn').addEventListener('click', logout);
+    function logout() {
+        auth.signOut();
+        currentUser = null;
+        document.getElementById('salesPage').style.display = 'none';
+        document.getElementById('adminPage').style.display = 'none';
+        document.getElementById('loginPage').style.display = 'block';
     }
 
     // ==================== 商品管理 ====================
@@ -229,27 +229,20 @@
         await db.collection('users').add({username:u,password:p,role:'sales',balance:b}); renderUserList();
     });
 
-    // ==================== 32列表头 ====================
-    const TEMPLATE_HEADERS = ['填表日期','来源','物流单号','收件人姓名','收件人地址','收件邮编','收件电话','发货箱数','目的地','订单号','店铺名称','品名','描述(材质）','商品数量','商品1SKU','产品1数量','商品2SKU','产品2数量','商品3SKU','产品3数量','商品4SKU','产品4数量','商品5SKU','产品5数量','商品费用','运费','总费用','申请时余额','扣减后余额','余额变动','备注','是否已导出'];
-
-    // 解析Excel行，提取SKU和数量
+    // ==================== 销售商：上传订单 ====================
     function parseOrderRow(row) {
         let rowItemCost = 0, rowQty = 0;
-        const items = [];
         for(let i=0;i<5;i++) {
             const sku = String(row[14+i*2]||'').trim(), qty = parseInt(row[15+i*2])||0;
             if(sku && qty>0) {
                 const prod = allProducts.find(p=>p.sku===sku);
-                const price = prod ? prod.price : 0;
-                rowItemCost += price * qty;
+                rowItemCost += (prod?prod.price:0) * qty;
                 rowQty += qty;
-                items.push({sku, quantity: qty});
             }
         }
-        return { rowItemCost, rowQty, items };
+        return { rowItemCost, rowQty };
     }
 
-    // ==================== 销售商：上传订单 ====================
     document.getElementById('uploadOrderBtn').addEventListener('click', async ()=>{
         const file = document.getElementById('orderFile').files[0];
         if(!file) { alert('请选择文件'); return; }
@@ -273,28 +266,22 @@
 
             const userDoc = await db.collection('users').doc(currentUser.id).get();
             const balance = userDoc.data().balance || 0;
-            if(balance < totalCost) { document.getElementById('uploadMsg').textContent = `余额不足！需要 ${totalCost} 元，当前余额 ${balance} 元`; return; }
+            if(balance < totalCost) { document.getElementById('uploadMsg').textContent = `余额不足！需要 ${totalCost.toFixed(2)} 元，当前余额 ${balance.toFixed(2)} 元`; return; }
 
             const newBalance = balance - totalCost;
             await db.collection('users').doc(currentUser.id).update({balance: newBalance});
             currentUser.balance = newBalance;
 
-            // 构建完整数据
             const fullData = [];
             for(const row of rows) {
                 if(row.length < 4) continue;
                 const { rowItemCost, rowQty } = parseOrderRow(row);
                 const rowShipping = calcShipping(rowQty);
                 const rowTotal = rowItemCost + rowShipping;
-                const newRow = [
-                    ...row.slice(0,24).concat(new Array(24-row.length).fill('')),
-                    rowItemCost.toFixed(2), rowShipping, rowTotal.toFixed(2),
-                    balance.toFixed(2), newBalance.toFixed(2), (newBalance-balance).toFixed(2), '', '否'
-                ];
+                const newRow = [...row.slice(0,24).concat(new Array(24-row.length).fill('')), rowItemCost.toFixed(2), rowShipping, rowTotal.toFixed(2), balance.toFixed(2), newBalance.toFixed(2), (newBalance-balance).toFixed(2), '', '否'];
                 fullData.push(newRow);
             }
 
-            // 保存到 orders 集合
             await db.collection('orders').add({
                 username: currentUser.username, userId: currentUser.id,
                 totalItemCost, shippingFee, totalCost,
@@ -316,7 +303,7 @@
         XLSX.writeFile(wb, '金海嘉运标准模板.xlsx');
     });
 
-    // 销售商：下载管理员分发的表格
+    // 销售商下载
     document.getElementById('downloadMyFileBtn').addEventListener('click', async ()=>{
         const snap = await db.collection('dist_files').where('username','==',currentUser.username).orderBy('timestamp','desc').limit(1).get();
         if(snap.empty) { document.getElementById('downloadMsg').textContent = '暂无管理员分发的表格'; return; }
@@ -327,7 +314,7 @@
         document.getElementById('downloadMsg').textContent = '下载成功';
     });
 
-    // ==================== 管理员：上传总表并拆分 ====================
+    // ==================== 管理员：上传总表拆分 ====================
     document.getElementById('uploadMasterBtn').addEventListener('click', async ()=>{
         const file = document.getElementById('masterFile').files[0];
         if(!file) { alert('请选择文件'); return; }
@@ -342,11 +329,8 @@
                 if(salesNames.includes(name)) {
                     const ws = wb.Sheets[name];
                     const data = XLSX.utils.sheet_to_json(ws, {header:1});
-                    const ref = db.collection('dist_files').doc();
-                    batch.set(ref, {
-                        username: name,
-                        sheetName: name,
-                        data: data,
+                    batch.set(db.collection('dist_files').doc(), {
+                        username: name, sheetName: name, data: data,
                         timestamp: firebase.firestore.FieldValue.serverTimestamp()
                     });
                     count++;
@@ -358,7 +342,7 @@
         reader.readAsArrayBuffer(file);
     });
 
-    // ==================== 管理员：下载各销售商订单 ====================
+    // ==================== 管理员：下载订单 ====================
     document.getElementById('downloadAllOrdersBtn').addEventListener('click', async ()=>{
         const start = document.getElementById('adminStartDate').value, end = document.getElementById('adminEndDate').value;
         let q = db.collection('orders').orderBy('timestamp','desc');
@@ -379,7 +363,7 @@
         XLSX.writeFile(wb, `全部订单_${start||'全部'}_${end||'全部'}.xlsx`);
     });
 
-    // ==================== 管理员：月度汇总 ====================
+    // ==================== 月度汇总 ====================
     document.getElementById('generateSummaryBtn').addEventListener('click', async ()=>{
         const month = document.getElementById('summaryMonth').value;
         if(!month) { alert('请选择月份'); return; }
@@ -387,9 +371,7 @@
         const start = new Date(year, mon-1, 1);
         const end = new Date(year, mon, 0, 23, 59, 59);
         const snap = await db.collection('orders').where('timestamp','>=',start).where('timestamp','<=',end).get();
-        const dayMap = {};
-        const allSkus = new Set();
-        const allSales = new Set();
+        const dayMap = {}, allSkus = new Set(), allSales = new Set();
         snap.forEach(d=>{
             const o = d.data();
             const day = new Date(o.timestamp.toDate()).getDate();
@@ -437,7 +419,7 @@
         document.getElementById('summaryMsg').textContent = `已生成 ${year}年${mon}月 汇总表`;
     });
 
-    // 初始化管理员
+    // 初始化
     async function initAdminUser() {
         await ensureAuth();
         if((await db.collection('users').where('username','==',ADMIN_USER).get()).empty)
