@@ -44,7 +44,6 @@
         <div id="loginError" class="error"></div>
     </div>
 
-    <!-- 销售商界面 -->
     <div id="salesPage" style="display:none" class="container">
         <div class="card">
             <span class="brand">🚚 金海嘉运 HR2.0</span>
@@ -68,7 +67,6 @@
         </div>
     </div>
 
-    <!-- 管理员界面 -->
     <div id="adminPage" style="display:none" class="container">
         <div class="card">
             <span class="brand">🚚 金海嘉运 HR2.0</span>
@@ -98,7 +96,7 @@
         </div>
         <div class="card">
             <h2>📤 上传总表（自动拆分）</h2>
-            <p style="font-size:13px;color:#666">上传 admin_总表.xlsx，Sheet名需与销售商用户名一致。系统自动拆分并分发。</p>
+            <p style="font-size:13px;color:#666">上传 admin_总表.xlsx，Sheet名需与销售商用户名一致。</p>
             <input type="file" id="masterFile" accept=".xlsx, .xls">
             <button id="uploadMasterBtn">📤 上传并拆分</button>
             <div id="masterMsg"></div>
@@ -137,7 +135,7 @@
 
     async function ensureAuth() { if (auth.currentUser) return auth.currentUser; return auth.signInAnonymously(); }
 
-    // ==================== 登录 ====================
+    // 登录
     document.getElementById('loginBtn').addEventListener('click', async () => {
         const u = document.getElementById('loginUsername').value.trim(), p = document.getElementById('loginPassword').value.trim();
         if(!u||!p) { document.getElementById('loginError').textContent='请输入用户名和密码'; return; }
@@ -169,14 +167,13 @@
     document.getElementById('salesLogoutBtn').addEventListener('click', logout);
     document.getElementById('adminLogoutBtn').addEventListener('click', logout);
     function logout() {
-        auth.signOut();
-        currentUser = null;
+        auth.signOut(); currentUser = null;
         document.getElementById('salesPage').style.display = 'none';
         document.getElementById('adminPage').style.display = 'none';
         document.getElementById('loginPage').style.display = 'block';
     }
 
-    // ==================== 商品 ====================
+    // 商品
     async function loadProducts() { await ensureAuth(); const s = await db.collection('products').get(); allProducts = s.docs.map(d=>({id:d.id,...d.data()})); }
     document.getElementById('addProductBtn').addEventListener('click', async ()=>{
         const sku = document.getElementById('newSku').value.trim(), price = parseFloat(document.getElementById('newPrice').value);
@@ -189,7 +186,7 @@
         s.forEach(d=>{ const p=d.data(); tbody.innerHTML+=`<tr><td>${p.sku}</td><td>${p.price}</td><td><button class="btn-danger" onclick="db.collection('products').doc('${d.id}').delete().then(()=>renderProductList())">删除</button></td></tr>`; });
     }
 
-    // ==================== 运费 ====================
+    // 运费
     async function loadShippingRule() { const d = await db.collection('settings').doc('shipping').get(); if(d.exists) shippingRule = d.data(); }
     async function loadShippingSettings() { const d = await db.collection('settings').doc('shipping').get(); if(d.exists){ document.getElementById('shipThreshold').value=d.data().threshold; document.getElementById('shipLow').value=d.data().low; document.getElementById('shipHigh').value=d.data().high; } }
     document.getElementById('saveShippingBtn').addEventListener('click', async ()=>{
@@ -198,7 +195,7 @@
     });
     function calcShipping(q) { if(q<=0) return 0; return q>shippingRule.threshold ? shippingRule.high : shippingRule.low; }
 
-    // ==================== 用户管理 ====================
+    // 用户管理
     async function renderUserList() {
         const tbody = document.querySelector('#userTable tbody'); tbody.innerHTML='';
         const s = await db.collection('users').get();
@@ -230,7 +227,7 @@
         await db.collection('users').add({username:u,password:p,role:'sales',balance:b}); renderUserList();
     });
 
-    // ==================== 销售商：上传订单 ====================
+    // 解析函数
     function parseOrderRow(row) {
         let rowItemCost = 0, rowQty = 0;
         for(let i=0;i<5;i++) {
@@ -244,6 +241,7 @@
         return { rowItemCost, rowQty };
     }
 
+    // 上传订单
     document.getElementById('uploadOrderBtn').addEventListener('click', async ()=>{
         const file = document.getElementById('orderFile').files[0];
         if(!file) { alert('请选择文件'); return; }
@@ -258,11 +256,18 @@
             if(rows[0] && (rows[0][0]==='填表日期' || rows[0][3]==='收件人姓名')) rows.shift();
 
             let totalItemCost = 0, totalQty = 0;
+            const fullData = [];
             for(const row of rows) {
                 if(row.length < 4) continue;
                 const { rowItemCost, rowQty } = parseOrderRow(row);
                 totalItemCost += rowItemCost;
                 totalQty += rowQty;
+                const rowShipping = calcShipping(rowQty);
+                const rowTotal = rowItemCost + rowShipping;
+                fullData.push({
+                    cost: rowItemCost, shipping: rowShipping, total: rowTotal, qty: rowQty,
+                    row: [...row.slice(0,24).concat(new Array(24-row.length).fill('')), rowItemCost.toFixed(2), rowShipping, rowTotal.toFixed(2)]
+                });
             }
             const shippingFee = calcShipping(totalQty);
             const totalCost = totalItemCost + shippingFee;
@@ -270,7 +275,7 @@
             const userDoc = await db.collection('users').doc(currentUser.id).get();
             const balance = userDoc.data().balance || 0;
             if(balance < totalCost) {
-                uploadMsg.innerHTML = `<span class="fail">余额不足！需要 ${totalCost.toFixed(2)} 元，当前余额 ${balance.toFixed(2)} 元。请联系管理员充值。</span>`;
+                uploadMsg.innerHTML = `<span class="fail">余额不足！需要 ${totalCost.toFixed(2)} 元，当前余额 ${balance.toFixed(2)} 元。</span>`;
                 return;
             }
 
@@ -278,35 +283,19 @@
             await db.collection('users').doc(currentUser.id).update({balance: newBalance});
             currentUser.balance = newBalance;
 
-            const fullData = [];
-            for(const row of rows) {
-                if(row.length < 4) continue;
-                const { rowItemCost, rowQty } = parseOrderRow(row);
-                const rowShipping = calcShipping(rowQty);
-                const rowTotal = rowItemCost + rowShipping;
-                const newRow = [
-                    ...row.slice(0,24).concat(new Array(24-row.length).fill('')),
-                    rowItemCost.toFixed(2),       // 25 商品费用
-                    rowShipping,                   // 26 运费
-                    rowTotal.toFixed(2),           // 27 总费用
-                    balance.toFixed(2),            // 28 申请时余额
-                    rowTotal.toFixed(2),           // 29 本单扣减
-                    newBalance.toFixed(2),         // 30 扣减后余额
-                    (-rowTotal).toFixed(2),        // 31 余额变动
-                    ''                             // 32 备注
-                ];
-                fullData.push(newRow);
-            }
-
-            await db.collection('orders').add({
+            // 批量写入订单数据
+            const batch = db.batch();
+            const finalData = fullData.map(d => [...d.row, balance.toFixed(2), d.total.toFixed(2), newBalance.toFixed(2), (-d.total).toFixed(2), '']);
+            batch.set(db.collection('orders').doc(), {
                 username: currentUser.username, userId: currentUser.id,
                 totalItemCost, shippingFee, totalCost,
                 balanceBefore: balance, balanceAfter: newBalance,
-                data: fullData,
+                data: finalData,
                 timestamp: firebase.firestore.FieldValue.serverTimestamp()
             });
+            await batch.commit();
 
-            uploadMsg.innerHTML = `<span class="success">✅ 上传成功！本批次共 ${fullData.length} 条订单，总费用 ${totalCost.toFixed(2)} 元（商品费 ${totalItemCost.toFixed(2)} + 运费 ${shippingFee}），已扣款，剩余余额 ${newBalance.toFixed(2)} 元。</span>`;
+            uploadMsg.innerHTML = `<span class="success">✅ 上传成功！${fullData.length} 条订单，总费用 ${totalCost.toFixed(2)} 元（商品 ${totalItemCost.toFixed(2)} + 运费 ${shippingFee}），剩余余额 ${newBalance.toFixed(2)} 元。</span>`;
             document.getElementById('orderFile').value = '';
         };
         reader.readAsArrayBuffer(file);
@@ -320,7 +309,7 @@
         XLSX.writeFile(wb, `${currentUser.username}_订单模板.xlsx`);
     });
 
-    // 销售商下载管理员分发的表
+    // 下载表格
     document.getElementById('downloadMyFileBtn').addEventListener('click', async ()=>{
         const snap = await db.collection('dist_files').where('username','==',currentUser.username).orderBy('timestamp','desc').limit(1).get();
         if(snap.empty) { document.getElementById('downloadMsg').textContent = '暂无管理员分发的表格'; return; }
@@ -331,7 +320,7 @@
         document.getElementById('downloadMsg').innerHTML = '<span class="success">✅ 下载成功</span>';
     });
 
-    // ==================== 管理员：上传总表拆分 ====================
+    // 管理员拆分
     document.getElementById('uploadMasterBtn').addEventListener('click', async ()=>{
         const file = document.getElementById('masterFile').files[0];
         if(!file) { alert('请选择文件'); return; }
@@ -342,27 +331,26 @@
             const wb = XLSX.read(new Uint8Array(e.target.result), {type:'array'});
             const salesSnap = await db.collection('users').where('role','==','sales').get();
             const salesNames = salesSnap.docs.map(d=>d.data().username);
-            let count = 0;
             const batch = db.batch();
+            let count = 0;
             for(const name of wb.SheetNames) {
                 if(salesNames.includes(name)) {
-                    const ws = wb.Sheets[name];
-                    const data = XLSX.utils.sheet_to_json(ws, {header:1});
+                    const data = XLSX.utils.sheet_to_json(wb.Sheets[name], {header:1});
                     batch.set(db.collection('dist_files').doc(), {
-                        username: name, sheetName: name, data: data,
+                        username: name, sheetName: name, data,
                         timestamp: firebase.firestore.FieldValue.serverTimestamp()
                     });
                     count++;
                 }
             }
-            if(count === 0) { masterMsg.innerHTML = '<span class="fail">未找到匹配的销售商Sheet，请检查Sheet名是否与销售商用户名一致。</span>'; return; }
+            if(count === 0) { masterMsg.innerHTML = '<span class="fail">未找到匹配的Sheet名</span>'; return; }
             await batch.commit();
-            masterMsg.innerHTML = `<span class="success">✅ 成功拆分并分发到 ${count} 个销售商</span>`;
+            masterMsg.innerHTML = `<span class="success">✅ 已拆分到 ${count} 个销售商</span>`;
         };
         reader.readAsArrayBuffer(file);
     });
 
-    // ==================== 管理员：下载订单 ====================
+    // 管理员下载
     document.getElementById('downloadAllOrdersBtn').addEventListener('click', async ()=>{
         const start = document.getElementById('adminStartDate').value, end = document.getElementById('adminEndDate').value;
         let q = db.collection('orders').orderBy('timestamp','desc');
@@ -373,24 +361,30 @@
         snap.forEach(d=>{
             const o = d.data();
             if(!groups[o.username]) groups[o.username] = [];
-            if(o.data && Array.isArray(o.data)) groups[o.username].push(...o.data);
+            if(o.data) groups[o.username].push(...o.data);
         });
         const wb = XLSX.utils.book_new();
         for(const [name, data] of Object.entries(groups)) {
             XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([TEMPLATE_HEADERS, ...data]), name);
         }
-        if(Object.keys(groups).length === 0) { alert('没有订单数据'); return; }
+        if(!Object.keys(groups).length) { alert('没有订单数据'); return; }
         XLSX.writeFile(wb, `admin_总表_${start||'全部'}_${end||'全部'}.xlsx`);
     });
 
-    // ==================== 月度汇总 ====================
+    // 月度汇总
     document.getElementById('generateSummaryBtn').addEventListener('click', async ()=>{
         const month = document.getElementById('summaryMonth').value;
         if(!month) { alert('请选择月份'); return; }
         const [year, mon] = month.split('-');
         const start = new Date(year, mon-1, 1);
         const end = new Date(year, mon, 0, 23, 59, 59);
-        const snap = await db.collection('orders').where('timestamp','>=',start).where('timestamp','<=',end).get();
+
+        const snap = await db.collection('orders')
+            .where('timestamp','>=',start)
+            .where('timestamp','<=',end)
+            .select('data', 'username', 'timestamp')
+            .get();
+
         const dayMap = {}, allSkus = new Set(), allSales = new Set();
         snap.forEach(d=>{
             const o = d.data();
@@ -409,10 +403,12 @@
                 }
             }
         });
+
         if(allSkus.size === 0) { alert('该月没有订单数据'); return; }
         const salesArr = [...allSales].sort();
         const skuArr = [...allSkus].sort();
         const days = Object.keys(dayMap).map(Number).sort((a,b)=>a-b);
+
         const header = ['SKU'];
         for(const d of days) {
             for(const s of salesArr) header.push(`${mon}月${d}日 ${s}`);
@@ -432,6 +428,7 @@
             }
             dataRows.push(row);
         }
+
         const ws = XLSX.utils.aoa_to_sheet(dataRows);
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, `${year}年${mon}月`);
@@ -439,7 +436,6 @@
         document.getElementById('summaryMsg').innerHTML = `<span class="success">✅ 已生成 ${year}年${mon}月 汇总表</span>`;
     });
 
-    // 初始化
     async function initAdminUser() {
         await ensureAuth();
         if((await db.collection('users').where('username','==',ADMIN_USER).get()).empty)
