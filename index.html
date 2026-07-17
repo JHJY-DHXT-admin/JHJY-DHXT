@@ -7,7 +7,6 @@
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
     <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
     <style>
         *{box-sizing:border-box;margin:0;padding:0}
@@ -135,7 +134,7 @@
     };
     const ADMIN_USER = "admin", ADMIN_PASS = "admin123";
     firebase.initializeApp(firebaseConfig);
-    const auth = firebase.auth(), db = firebase.firestore(), storage = firebase.storage();
+    const auth = firebase.auth(), db = firebase.firestore();
     let currentUser = null, allProducts = [], shippingRule = { threshold: 4, low: 18, high: 35 };
 
     async function ensureAuth() { if (auth.currentUser) return auth.currentUser; return auth.signInAnonymously(); }
@@ -230,6 +229,26 @@
         await db.collection('users').add({username:u,password:p,role:'sales',balance:b}); renderUserList();
     });
 
+    // ==================== 32列表头 ====================
+    const TEMPLATE_HEADERS = ['填表日期','来源','物流单号','收件人姓名','收件人地址','收件邮编','收件电话','发货箱数','目的地','订单号','店铺名称','品名','描述(材质）','商品数量','商品1SKU','产品1数量','商品2SKU','产品2数量','商品3SKU','产品3数量','商品4SKU','产品4数量','商品5SKU','产品5数量','商品费用','运费','总费用','申请时余额','扣减后余额','余额变动','备注','是否已导出'];
+
+    // 解析Excel行，提取SKU和数量
+    function parseOrderRow(row) {
+        let rowItemCost = 0, rowQty = 0;
+        const items = [];
+        for(let i=0;i<5;i++) {
+            const sku = String(row[14+i*2]||'').trim(), qty = parseInt(row[15+i*2])||0;
+            if(sku && qty>0) {
+                const prod = allProducts.find(p=>p.sku===sku);
+                const price = prod ? prod.price : 0;
+                rowItemCost += price * qty;
+                rowQty += qty;
+                items.push({sku, quantity: qty});
+            }
+        }
+        return { rowItemCost, rowQty, items };
+    }
+
     // ==================== 销售商：上传订单 ====================
     document.getElementById('uploadOrderBtn').addEventListener('click', async ()=>{
         const file = document.getElementById('orderFile').files[0];
@@ -240,79 +259,51 @@
             const ws = wb.Sheets[wb.SheetNames[0]];
             const rows = XLSX.utils.sheet_to_json(ws, {header:1});
             if(rows.length < 2) { alert('文件无数据'); return; }
-            // 计算总费用
-            let totalItemCost = 0, totalQty = 0;
             if(rows[0] && (rows[0][0]==='填表日期' || rows[0][3]==='收件人姓名')) rows.shift();
-            const processedRows = [TEMPLATE_HEADERS];
+
+            let totalItemCost = 0, totalQty = 0;
             for(const row of rows) {
                 if(row.length < 4) continue;
-                let rowItemCost = 0, rowQty = 0;
-                for(let i=0;i<5;i++) {
-                    const sku = String(row[14+i*2]||'').trim(), qty = parseInt(row[15+i*2])||0;
-                    if(sku && qty>0) {
-                        const prod = allProducts.find(p=>p.sku===sku);
-                        const price = prod ? prod.price : 0;
-                        rowItemCost += price * qty;
-                        rowQty += qty;
-                    }
-                }
+                const { rowItemCost, rowQty } = parseOrderRow(row);
                 totalItemCost += rowItemCost;
                 totalQty += rowQty;
             }
             const shippingFee = calcShipping(totalQty);
             const totalCost = totalItemCost + shippingFee;
 
-            // 检查余额
             const userDoc = await db.collection('users').doc(currentUser.id).get();
             const balance = userDoc.data().balance || 0;
             if(balance < totalCost) { document.getElementById('uploadMsg').textContent = `余额不足！需要 ${totalCost} 元，当前余额 ${balance} 元`; return; }
 
-            // 扣余额
             const newBalance = balance - totalCost;
             await db.collection('users').doc(currentUser.id).update({balance: newBalance});
             currentUser.balance = newBalance;
 
-            // 构建带费用的完整数据
+            // 构建完整数据
             const fullData = [];
             for(const row of rows) {
                 if(row.length < 4) continue;
-                let rowItemCost = 0, rowQty = 0;
-                const items = [];
-                for(let i=0;i<5;i++) {
-                    const sku = String(row[14+i*2]||'').trim(), qty = parseInt(row[15+i*2])||0;
-                    if(sku && qty>0) {
-                        const prod = allProducts.find(p=>p.sku===sku);
-                        const price = prod ? prod.price : 0;
-                        rowItemCost += price * qty;
-                        rowQty += qty;
-                        items.push({sku, quantity: qty});
-                    }
-                }
+                const { rowItemCost, rowQty } = parseOrderRow(row);
                 const rowShipping = calcShipping(rowQty);
                 const rowTotal = rowItemCost + rowShipping;
-                const newRow = [...row.slice(0,24), rowItemCost.toFixed(2), rowShipping, rowTotal.toFixed(2), balance.toFixed(2), newBalance.toFixed(2), (newBalance-balance).toFixed(2), '', '否'];
+                const newRow = [
+                    ...row.slice(0,24).concat(new Array(24-row.length).fill('')),
+                    rowItemCost.toFixed(2), rowShipping, rowTotal.toFixed(2),
+                    balance.toFixed(2), newBalance.toFixed(2), (newBalance-balance).toFixed(2), '', '否'
+                ];
                 fullData.push(newRow);
             }
 
-            // 保存到Firestore
-            const orderDoc = {
-                username: currentUser.username,
-                userId: currentUser.id,
+            // 保存到 orders 集合
+            await db.collection('orders').add({
+                username: currentUser.username, userId: currentUser.id,
                 totalItemCost, shippingFee, totalCost,
                 balanceBefore: balance, balanceAfter: newBalance,
                 data: fullData,
                 timestamp: firebase.firestore.FieldValue.serverTimestamp()
-            };
-            await db.collection('orders').add(orderDoc);
+            });
 
-            // 上传文件到Storage
-            const newWb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(newWb, XLSX.utils.aoa_to_sheet([TEMPLATE_HEADERS, ...fullData]), '订单');
-            const buf = XLSX.write(newWb, {type:'array', bookType:'xlsx'});
-            const blob = new Blob([buf], {type:'application/octet-stream'});
-            await storage.ref(`orders/${currentUser.username}/${Date.now()}.xlsx`).put(blob);
-
-            document.getElementById('uploadMsg').textContent = `上传成功！扣款 ${totalCost} 元，剩余余额 ${newBalance} 元`;
+            document.getElementById('uploadMsg').textContent = `上传成功！扣款 ${totalCost.toFixed(2)} 元，剩余余额 ${newBalance.toFixed(2)} 元`;
             document.getElementById('orderFile').value = '';
         };
         reader.readAsArrayBuffer(file);
@@ -325,15 +316,15 @@
         XLSX.writeFile(wb, '金海嘉运标准模板.xlsx');
     });
 
-    // 销售商：下载自己的表格
+    // 销售商：下载管理员分发的表格
     document.getElementById('downloadMyFileBtn').addEventListener('click', async ()=>{
-        const ref = storage.ref(`dist/${currentUser.username}/latest.xlsx`);
-        try {
-            const url = await ref.getDownloadURL();
-            window.open(url, '_blank');
-        } catch(e) {
-            document.getElementById('downloadMsg').textContent = '暂无管理员分发的表格';
-        }
+        const snap = await db.collection('dist_files').where('username','==',currentUser.username).orderBy('timestamp','desc').limit(1).get();
+        if(snap.empty) { document.getElementById('downloadMsg').textContent = '暂无管理员分发的表格'; return; }
+        const doc = snap.docs[0].data();
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(doc.data), doc.sheetName || '表格');
+        XLSX.writeFile(wb, `${currentUser.username}_最新表格.xlsx`);
+        document.getElementById('downloadMsg').textContent = '下载成功';
     });
 
     // ==================== 管理员：上传总表并拆分 ====================
@@ -343,20 +334,25 @@
         const reader = new FileReader();
         reader.onload = async (e) => {
             const wb = XLSX.read(new Uint8Array(e.target.result), {type:'array'});
-            const salesUsers = await db.collection('users').where('role','==','sales').get();
-            const salesNames = salesUsers.docs.map(d=>d.data().username);
+            const salesSnap = await db.collection('users').where('role','==','sales').get();
+            const salesNames = salesSnap.docs.map(d=>d.data().username);
             let count = 0;
+            const batch = db.batch();
             for(const name of wb.SheetNames) {
                 if(salesNames.includes(name)) {
                     const ws = wb.Sheets[name];
-                    const newWb = XLSX.utils.book_new();
-                    XLSX.utils.book_append_sheet(newWb, ws, name);
-                    const buf = XLSX.write(newWb, {type:'array', bookType:'xlsx'});
-                    const blob = new Blob([buf], {type:'application/octet-stream'});
-                    await storage.ref(`dist/${name}/latest.xlsx`).put(blob);
+                    const data = XLSX.utils.sheet_to_json(ws, {header:1});
+                    const ref = db.collection('dist_files').doc();
+                    batch.set(ref, {
+                        username: name,
+                        sheetName: name,
+                        data: data,
+                        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                    });
                     count++;
                 }
             }
+            await batch.commit();
             document.getElementById('masterMsg').textContent = `成功拆分并分发到 ${count} 个销售商`;
         };
         reader.readAsArrayBuffer(file);
@@ -373,12 +369,13 @@
         snap.forEach(d=>{
             const o = d.data();
             if(!groups[o.username]) groups[o.username] = [];
-            groups[o.username].push(...o.data);
+            if(o.data && Array.isArray(o.data)) groups[o.username].push(...o.data);
         });
         const wb = XLSX.utils.book_new();
         for(const [name, data] of Object.entries(groups)) {
             XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([TEMPLATE_HEADERS, ...data]), name);
         }
+        if(Object.keys(groups).length === 0) { alert('没有订单数据'); return; }
         XLSX.writeFile(wb, `全部订单_${start||'全部'}_${end||'全部'}.xlsx`);
     });
 
@@ -390,7 +387,7 @@
         const start = new Date(year, mon-1, 1);
         const end = new Date(year, mon, 0, 23, 59, 59);
         const snap = await db.collection('orders').where('timestamp','>=',start).where('timestamp','<=',end).get();
-        const dayMap = {}; // { day: { sku: { username: qty } } }
+        const dayMap = {};
         const allSkus = new Set();
         const allSales = new Set();
         snap.forEach(d=>{
@@ -398,6 +395,7 @@
             const day = new Date(o.timestamp.toDate()).getDate();
             if(!dayMap[day]) dayMap[day] = {};
             allSales.add(o.username);
+            if(!o.data) return;
             for(const row of o.data) {
                 for(let i=0;i<5;i++) {
                     const sku = String(row[14+i*2]||'').trim(), qty = parseInt(row[15+i*2])||0;
@@ -409,10 +407,10 @@
                 }
             }
         });
+        if(allSkus.size === 0) { alert('该月没有订单数据'); return; }
         const salesArr = [...allSales].sort();
         const skuArr = [...allSkus].sort();
         const days = Object.keys(dayMap).map(Number).sort((a,b)=>a-b);
-        // 构建表头
         const header = ['SKU'];
         for(const d of days) {
             for(const s of salesArr) header.push(`${mon}月${d}日 ${s}`);
@@ -439,10 +437,7 @@
         document.getElementById('summaryMsg').textContent = `已生成 ${year}年${mon}月 汇总表`;
     });
 
-    // 32列表头
-    const TEMPLATE_HEADERS = ['填表日期','来源','物流单号','收件人姓名','收件人地址','收件邮编','收件电话','发货箱数','目的地','订单号','店铺名称','品名','描述(材质）','商品数量','商品1SKU','产品1数量','商品2SKU','产品2数量','商品3SKU','产品3数量','商品4SKU','产品4数量','商品5SKU','产品5数量','商品费用','运费','总费用','申请时余额','扣减后余额','余额变动','备注','是否已导出'];
-
-    // 初始化
+    // 初始化管理员
     async function initAdminUser() {
         await ensureAuth();
         if((await db.collection('users').where('username','==',ADMIN_USER).get()).empty)
