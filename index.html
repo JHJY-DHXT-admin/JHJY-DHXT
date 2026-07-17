@@ -31,6 +31,8 @@
         .hidden{display:none}
         .brand{font-size:20px;font-weight:bold;color:#1677ff}
         .msg{color:#1677ff;margin-top:8px;font-size:14px}
+        .success{color:#52c41a;margin-top:8px;font-size:14px;font-weight:bold}
+        .fail{color:#ff4d4f;margin-top:8px;font-size:14px;font-weight:bold}
     </style>
 </head>
 <body>
@@ -51,16 +53,16 @@
         </div>
         <div class="card">
             <h2>📤 上传订单文件</h2>
-            <p style="font-size:13px;color:#666">请上传标准32列Excel文件。系统自动计算费用并扣减余额。</p>
+            <p style="font-size:13px;color:#666">请上传标准32列Excel文件。系统自动计算费用、扣减余额，并补全后8列。</p>
             <input type="file" id="orderFile" accept=".xlsx, .xls">
             <button id="uploadOrderBtn">📤 上传并提交</button>
-            <div id="uploadMsg" class="msg"></div>
+            <div id="uploadMsg"></div>
             <hr style="margin:16px 0">
             <button id="downloadTemplateBtn" class="btn-success">📋 下载标准模板</button>
         </div>
         <div class="card">
             <h2>📥 下载我的表格</h2>
-            <p style="font-size:13px;color:#666">下载管理员拆分给您的订单文件（含余额、费用明细）。</p>
+            <p style="font-size:13px;color:#666">下载管理员分发的表格（含费用明细和余额变动）。</p>
             <button id="downloadMyFileBtn" class="btn-success">⬇️ 下载我的表格</button>
             <div id="downloadMsg" class="msg"></div>
         </div>
@@ -96,10 +98,10 @@
         </div>
         <div class="card">
             <h2>📤 上传总表（自动拆分）</h2>
-            <p style="font-size:13px;color:#666">上传包含多个Sheet的Excel工作簿，Sheet名需与销售商用户名一致。</p>
+            <p style="font-size:13px;color:#666">上传 admin_总表.xlsx，Sheet名需与销售商用户名一致。系统自动拆分并分发。</p>
             <input type="file" id="masterFile" accept=".xlsx, .xls">
             <button id="uploadMasterBtn">📤 上传并拆分</button>
-            <div id="masterMsg" class="msg"></div>
+            <div id="masterMsg"></div>
         </div>
         <div class="card">
             <h2>📥 下载各销售商订单</h2>
@@ -131,7 +133,7 @@
     firebase.initializeApp(firebaseConfig);
     const auth = firebase.auth(), db = firebase.firestore();
     let currentUser = null, allProducts = [], shippingRule = { threshold: 4, low: 18, high: 35 };
-    const TEMPLATE_HEADERS = ['填表日期','来源','物流单号','收件人姓名','收件人地址','收件邮编','收件电话','发货箱数','目的地','订单号','店铺名称','品名','描述(材质）','商品数量','商品1SKU','产品1数量','商品2SKU','产品2数量','商品3SKU','产品3数量','商品4SKU','产品4数量','商品5SKU','产品5数量','商品费用','运费','总费用','申请时余额','扣减后余额','余额变动','备注','是否已导出'];
+    const TEMPLATE_HEADERS = ['填表日期','来源','物流单号','收件人姓名','收件人地址','收件邮编','收件电话','发货箱数','目的地','订单号','店铺名称','品名','描述(材质）','商品数量','商品1SKU','产品1数量','商品2SKU','产品2数量','商品3SKU','产品3数量','商品4SKU','产品4数量','商品5SKU','产品5数量','商品费用','运费','总费用','申请时余额','本单扣减','扣减后余额','余额变动','备注'];
 
     async function ensureAuth() { if (auth.currentUser) return auth.currentUser; return auth.signInAnonymously(); }
 
@@ -164,7 +166,6 @@
         loadProducts(); loadShippingRule();
     }
 
-    // 退出
     document.getElementById('salesLogoutBtn').addEventListener('click', logout);
     document.getElementById('adminLogoutBtn').addEventListener('click', logout);
     function logout() {
@@ -175,7 +176,7 @@
         document.getElementById('loginPage').style.display = 'block';
     }
 
-    // ==================== 商品管理 ====================
+    // ==================== 商品 ====================
     async function loadProducts() { await ensureAuth(); const s = await db.collection('products').get(); allProducts = s.docs.map(d=>({id:d.id,...d.data()})); }
     document.getElementById('addProductBtn').addEventListener('click', async ()=>{
         const sku = document.getElementById('newSku').value.trim(), price = parseFloat(document.getElementById('newPrice').value);
@@ -246,12 +247,14 @@
     document.getElementById('uploadOrderBtn').addEventListener('click', async ()=>{
         const file = document.getElementById('orderFile').files[0];
         if(!file) { alert('请选择文件'); return; }
+        const uploadMsg = document.getElementById('uploadMsg');
+        uploadMsg.innerHTML = '<span style="color:#1677ff">正在处理...</span>';
         const reader = new FileReader();
         reader.onload = async (e) => {
             const wb = XLSX.read(new Uint8Array(e.target.result), {type:'array'});
             const ws = wb.Sheets[wb.SheetNames[0]];
             const rows = XLSX.utils.sheet_to_json(ws, {header:1});
-            if(rows.length < 2) { alert('文件无数据'); return; }
+            if(rows.length < 2) { uploadMsg.innerHTML = '<span class="fail">文件无数据</span>'; return; }
             if(rows[0] && (rows[0][0]==='填表日期' || rows[0][3]==='收件人姓名')) rows.shift();
 
             let totalItemCost = 0, totalQty = 0;
@@ -266,7 +269,10 @@
 
             const userDoc = await db.collection('users').doc(currentUser.id).get();
             const balance = userDoc.data().balance || 0;
-            if(balance < totalCost) { document.getElementById('uploadMsg').textContent = `余额不足！需要 ${totalCost.toFixed(2)} 元，当前余额 ${balance.toFixed(2)} 元`; return; }
+            if(balance < totalCost) {
+                uploadMsg.innerHTML = `<span class="fail">余额不足！需要 ${totalCost.toFixed(2)} 元，当前余额 ${balance.toFixed(2)} 元。请联系管理员充值。</span>`;
+                return;
+            }
 
             const newBalance = balance - totalCost;
             await db.collection('users').doc(currentUser.id).update({balance: newBalance});
@@ -278,7 +284,17 @@
                 const { rowItemCost, rowQty } = parseOrderRow(row);
                 const rowShipping = calcShipping(rowQty);
                 const rowTotal = rowItemCost + rowShipping;
-                const newRow = [...row.slice(0,24).concat(new Array(24-row.length).fill('')), rowItemCost.toFixed(2), rowShipping, rowTotal.toFixed(2), balance.toFixed(2), newBalance.toFixed(2), (newBalance-balance).toFixed(2), '', '否'];
+                const newRow = [
+                    ...row.slice(0,24).concat(new Array(24-row.length).fill('')),
+                    rowItemCost.toFixed(2),       // 25 商品费用
+                    rowShipping,                   // 26 运费
+                    rowTotal.toFixed(2),           // 27 总费用
+                    balance.toFixed(2),            // 28 申请时余额
+                    rowTotal.toFixed(2),           // 29 本单扣减
+                    newBalance.toFixed(2),         // 30 扣减后余额
+                    (-rowTotal).toFixed(2),        // 31 余额变动
+                    ''                             // 32 备注
+                ];
                 fullData.push(newRow);
             }
 
@@ -290,7 +306,7 @@
                 timestamp: firebase.firestore.FieldValue.serverTimestamp()
             });
 
-            document.getElementById('uploadMsg').textContent = `上传成功！扣款 ${totalCost.toFixed(2)} 元，剩余余额 ${newBalance.toFixed(2)} 元`;
+            uploadMsg.innerHTML = `<span class="success">✅ 上传成功！本批次共 ${fullData.length} 条订单，总费用 ${totalCost.toFixed(2)} 元（商品费 ${totalItemCost.toFixed(2)} + 运费 ${shippingFee}），已扣款，剩余余额 ${newBalance.toFixed(2)} 元。</span>`;
             document.getElementById('orderFile').value = '';
         };
         reader.readAsArrayBuffer(file);
@@ -298,26 +314,29 @@
 
     // 下载模板
     document.getElementById('downloadTemplateBtn').addEventListener('click', ()=>{
-        const ws = XLSX.utils.aoa_to_sheet([TEMPLATE_HEADERS.slice(0,24)]);
-        const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, '模板');
-        XLSX.writeFile(wb, '金海嘉运标准模板.xlsx');
+        const ws = XLSX.utils.aoa_to_sheet([TEMPLATE_HEADERS]);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, currentUser.username);
+        XLSX.writeFile(wb, `${currentUser.username}_订单模板.xlsx`);
     });
 
-    // 销售商下载
+    // 销售商下载管理员分发的表
     document.getElementById('downloadMyFileBtn').addEventListener('click', async ()=>{
         const snap = await db.collection('dist_files').where('username','==',currentUser.username).orderBy('timestamp','desc').limit(1).get();
         if(snap.empty) { document.getElementById('downloadMsg').textContent = '暂无管理员分发的表格'; return; }
         const doc = snap.docs[0].data();
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(doc.data), doc.sheetName || '表格');
-        XLSX.writeFile(wb, `${currentUser.username}_最新表格.xlsx`);
-        document.getElementById('downloadMsg').textContent = '下载成功';
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(doc.data), currentUser.username);
+        XLSX.writeFile(wb, `${currentUser.username}.xlsx`);
+        document.getElementById('downloadMsg').innerHTML = '<span class="success">✅ 下载成功</span>';
     });
 
     // ==================== 管理员：上传总表拆分 ====================
     document.getElementById('uploadMasterBtn').addEventListener('click', async ()=>{
         const file = document.getElementById('masterFile').files[0];
         if(!file) { alert('请选择文件'); return; }
+        const masterMsg = document.getElementById('masterMsg');
+        masterMsg.innerHTML = '<span style="color:#1677ff">正在处理...</span>';
         const reader = new FileReader();
         reader.onload = async (e) => {
             const wb = XLSX.read(new Uint8Array(e.target.result), {type:'array'});
@@ -336,8 +355,9 @@
                     count++;
                 }
             }
+            if(count === 0) { masterMsg.innerHTML = '<span class="fail">未找到匹配的销售商Sheet，请检查Sheet名是否与销售商用户名一致。</span>'; return; }
             await batch.commit();
-            document.getElementById('masterMsg').textContent = `成功拆分并分发到 ${count} 个销售商`;
+            masterMsg.innerHTML = `<span class="success">✅ 成功拆分并分发到 ${count} 个销售商</span>`;
         };
         reader.readAsArrayBuffer(file);
     });
@@ -360,7 +380,7 @@
             XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([TEMPLATE_HEADERS, ...data]), name);
         }
         if(Object.keys(groups).length === 0) { alert('没有订单数据'); return; }
-        XLSX.writeFile(wb, `全部订单_${start||'全部'}_${end||'全部'}.xlsx`);
+        XLSX.writeFile(wb, `admin_总表_${start||'全部'}_${end||'全部'}.xlsx`);
     });
 
     // ==================== 月度汇总 ====================
@@ -415,8 +435,8 @@
         const ws = XLSX.utils.aoa_to_sheet(dataRows);
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, `${year}年${mon}月`);
-        XLSX.writeFile(wb, `月度汇总_${year}年${mon}月.xlsx`);
-        document.getElementById('summaryMsg').textContent = `已生成 ${year}年${mon}月 汇总表`;
+        XLSX.writeFile(wb, `admin_月度汇总_${year}年${mon}月.xlsx`);
+        document.getElementById('summaryMsg').innerHTML = `<span class="success">✅ 已生成 ${year}年${mon}月 汇总表</span>`;
     });
 
     // 初始化
